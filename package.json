@@ -1,0 +1,50 @@
+{
+  "name": "posed-camera",
+  "displayName": "Posed Camera",
+  "description": "VS Code extension for viewing PLY point cloud data in a webview.",
+  "version": "0.0.1",
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onLanguage:ply"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "posed-camera.openWebview",
+        "title": "Open Posed Camera PLY Viewer"
+      }
+    ],
+    "languages": [
+      {
+        "id": "ply",
+        "aliases": [
+          "PLY"
+        ],
+        "extensions": [
+          ".ply"
+        ]
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./ && tsc -p ./src/webview/tsconfig.json",
+    "watch": "tsc -watch -p ./",
+    "watch:webview": "tsc -watch -p ./src/webview/tsconfig.json",
+    "watch:all": "concurrently \"npm run watch\" \"npm run watch:webview\"",
+    "lint": "echo \"No lint configured\""
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/vscode": "^1.90.0",
+    "concurrently": "^9.2.0",
+    "typescript": "^5.6.3"
+  }
+}
