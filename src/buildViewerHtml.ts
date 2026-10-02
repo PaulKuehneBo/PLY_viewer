@@ -1,45 +1,39 @@
 import * as vscode from "vscode";
 
-import type { ParsedPly } from "./plyParser";
-
 export function buildPlyViewerHtml(
   webview: vscode.Webview,
-  parsed: ParsedPly,
+  plyFileUri: vscode.Uri,
   extensionUri: vscode.Uri,
 ): string {
-  console.log(
-    "[Posed Camera] Building PLY viewer HTML for",
-    parsed.vertices.length,
-    "vertices and",
-    parsed.faces.length,
-    "faces",
-  );
   const nonce = createNonce();
   const bundleUri = webview
     .asWebviewUri(
       vscode.Uri.joinPath(extensionUri, "out", "webview", "index.js"),
     )
     .toString();
-  const modelData = JSON.stringify({
-    vertices: parsed.vertices,
-    faces: parsed.faces,
-  });
-
-  if (!parsed.vertices.length) {
-    return `<!DOCTYPE html>
-			<html lang="en">
-			<head>
-				<meta charset="UTF-8" />
-				<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-				<title>Posed Camera PLY Viewer</title>
-				<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} blob: data:; style-src ${webview.cspSource} 'unsafe-inline'; font-src ${webview.cspSource}; script-src 'nonce-${nonce}' ${webview.cspSource}; connect-src ${webview.cspSource};">
-				<style>body { margin:0; background:#020817; color:#e2e8f0; font-family:sans-serif; display:grid; place-items:center; }</style>
-			</head>
-			<body>
-				<div>No valid PLY data found.</div>
-			</body>
-			</html>`;
-  }
+  const threeModuleUri = webview
+    .asWebviewUri(
+      vscode.Uri.joinPath(
+        extensionUri,
+        "node_modules",
+        "three",
+        "build",
+        "three.module.js",
+      ),
+    )
+    .toString();
+  const threeAddonsUri = webview
+    .asWebviewUri(
+      vscode.Uri.joinPath(
+        extensionUri,
+        "node_modules",
+        "three",
+        "examples",
+        "jsm",
+      ),
+    )
+    .toString();
+  const plyFileUrl = webview.asWebviewUri(plyFileUri).toString();
 
   return `
 		<!DOCTYPE html>
@@ -76,7 +70,16 @@ export function buildPlyViewerHtml(
 		</head>
 		<body>
 			<canvas id="viewer" tabindex="0"></canvas>
-			<script id="ply-data" type="application/json">${modelData}</script>
+			<div id="viewer-status" role="status">Loading PLY…</div>
+			<script id="ply-url" type="application/json">${JSON.stringify(plyFileUrl)}</script>
+			<script nonce="${nonce}" type="importmap">
+				{
+					"imports": {
+						"three": "${threeModuleUri}",
+						"three/addons/": "${threeAddonsUri}/"
+					}
+				}
+			</script>
 			<script nonce="${nonce}" type="module" src="${bundleUri}"></script>
 		</body>
 		</html>

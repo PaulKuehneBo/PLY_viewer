@@ -3,7 +3,6 @@ import * as path from "path";
 import * as vscode from "vscode";
 
 import { buildPlyViewerHtml } from "./buildViewerHtml";
-import { parsePlyFile, type ParsedPly } from "./plyParser";
 
 interface ViewerMessage {
   messageType: string;
@@ -27,42 +26,26 @@ function logViewerMessage(
 }
 
 let activePlyPanel: vscode.WebviewPanel | undefined;
-let activePlyModel: ParsedPly | undefined;
+let activePlyFileUri: vscode.Uri | undefined;
 let activePlyExtensionUri: vscode.Uri | undefined;
 let webviewReloadTimer: NodeJS.Timeout | undefined;
 
 function refreshActivePlyWebview(): void {
-  if (!activePlyPanel || !activePlyModel || !activePlyExtensionUri) {
+  if (!activePlyPanel || !activePlyFileUri || !activePlyExtensionUri) {
     return;
   }
 
   activePlyPanel.webview.html = buildPlyViewerHtml(
     activePlyPanel.webview,
-    activePlyModel,
+    activePlyFileUri,
     activePlyExtensionUri,
   );
 }
 
-function openPlyViewer(filePath: string, extensionUri: vscode.Uri): void {
-  console.log("[EXT] openPlyViewer start:", filePath);
-  const parsed = parsePlyFile(filePath);
-  activePlyModel = parsed;
+function openPlyViewer(fileUri: vscode.Uri, extensionUri: vscode.Uri): void {
+  console.log("[EXT] openPlyViewer start:", fileUri.fsPath);
+  activePlyFileUri = fileUri;
   activePlyExtensionUri = extensionUri;
-  console.log(
-    "[EXT] Opening PLY viewer:",
-    filePath,
-    "vertices=",
-    parsed.vertices.length,
-    "faces=",
-    parsed.faces.length,
-  );
-
-  if (parsed.vertices.length === 0) {
-    vscode.window.showWarningMessage(
-      "PLY-Datei enthält keine gültigen Vertices.",
-    );
-    return;
-  }
 
   if (activePlyPanel) {
     activePlyPanel.dispose();
@@ -80,7 +63,7 @@ function openPlyViewer(filePath: string, extensionUri: vscode.Uri): void {
         extensionUri,
         vscode.Uri.joinPath(extensionUri, "node_modules"),
         vscode.Uri.joinPath(extensionUri, "out"),
-        vscode.Uri.file(path.dirname(filePath)),
+        vscode.Uri.file(path.dirname(fileUri.fsPath)),
       ],
     },
   );
@@ -92,7 +75,7 @@ function openPlyViewer(filePath: string, extensionUri: vscode.Uri): void {
     }
   });
 
-  panel.webview.html = buildPlyViewerHtml(panel.webview, parsed, extensionUri);
+  panel.webview.html = buildPlyViewerHtml(panel.webview, fileUri, extensionUri);
   panel.webview.onDidReceiveMessage((message: unknown) => {
     const viewerMessage = message as ViewerMessage | undefined;
     if (
@@ -164,7 +147,7 @@ export function activate(context: vscode.ExtensionContext): void {
       }
 
       try {
-        openPlyViewer(fileUri[0].fsPath, context.extensionUri);
+        openPlyViewer(fileUri[0], context.extensionUri);
       } catch (err) {
         console.error("[EXT] Error opening PLY viewer:", err);
       }
@@ -176,13 +159,13 @@ export function activate(context: vscode.ExtensionContext): void {
   const fileOpenListener = vscode.workspace.onDidOpenTextDocument(
     (document) => {
       const fileName = document.fileName.toLowerCase();
-      if (!fileName.endsWith(".ply")) {
+      if (!fileName.endsWith(".ply") || document.uri.scheme !== "file") {
         return;
       }
 
       console.log("[EXT] PLY file found:", document.fileName);
       try {
-        openPlyViewer(document.fileName, context.extensionUri);
+        openPlyViewer(document.uri, context.extensionUri);
       } catch (err) {
         console.error("[EXT] Error opening PLY viewer:", err);
       }

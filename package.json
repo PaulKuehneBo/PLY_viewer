@@ -43,8 +43,12 @@
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
+    "@types/three": "^0.186.0",
     "@types/vscode": "^1.90.0",
     "concurrently": "^9.2.0",
     "typescript": "^5.6.3"
+  },
+  "dependencies": {
+    "three": "^0.186.1"
   }
 }
