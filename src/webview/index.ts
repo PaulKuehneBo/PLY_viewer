@@ -54,6 +54,11 @@ if (canvas && plyUrlNode) {
       1000,
     );
     const rotationStep = Math.PI / 36;
+    const targetAxes = new THREE.AxesHelper(1.5);
+    const raycaster = new THREE.Raycaster();
+    const mousePosition = new THREE.Vector2();
+    scene.add(targetAxes);
+    let cameraTarget: Vector3Tuple = [0, 0, 0];
     let cameraPosition: Vector3Tuple = [1, 1, 1];
     let cameraUp: Vector3Tuple = [0, 0, 1];
     let renderScheduled = false;
@@ -61,11 +66,13 @@ if (canvas && plyUrlNode) {
     let previousPointerX = 0;
     let previousPointerY = 0;
     let currentModel: THREE.Mesh | THREE.Points | undefined;
+    let currentModelCenter: Vector3Tuple = [0, 0, 0];
 
     function syncCamera(): void {
       camera.position.set(...cameraPosition);
       camera.up.set(...cameraUp);
-      camera.lookAt(0, 0, 0);
+      camera.lookAt(...cameraTarget);
+      targetAxes.position.set(...cameraTarget);
     }
 
     function render(): void {
@@ -94,9 +101,93 @@ if (canvas && plyUrlNode) {
     }
 
     function rotateCamera(axis: Vector3Tuple, angle: number): void {
-      cameraPosition = rotateAroundAxis(cameraPosition, axis, angle);
+      const relativePosition: Vector3Tuple = [
+        cameraPosition[0] - cameraTarget[0],
+        cameraPosition[1] - cameraTarget[1],
+        cameraPosition[2] - cameraTarget[2],
+      ];
+      const rotatedRelative = rotateAroundAxis(relativePosition, axis, angle);
+      cameraPosition = [
+        cameraTarget[0] + rotatedRelative[0],
+        cameraTarget[1] + rotatedRelative[1],
+        cameraTarget[2] + rotatedRelative[2],
+      ];
       cameraUp = rotateAroundAxis(cameraUp, axis, angle);
       syncCamera();
+    }
+
+    function centerCameraTargetOnModel(): void {
+      if (!currentModel) {
+        return;
+      }
+      const geometry = currentModel.geometry;
+      geometry.computeBoundingBox();
+      const box = geometry.boundingBox;
+      if (!box) {
+        return;
+      }
+      const center = box.getCenter(new THREE.Vector3());
+      currentModelCenter = [center.x, center.y, center.z];
+      cameraTarget = currentModelCenter;
+      syncCamera();
+      scheduleRender();
+    }
+
+    function resolvePointerTargetFromRay(): Vector3Tuple | undefined {
+      if (!currentModel) {
+        return undefined;
+      }
+
+      raycaster.setFromCamera(mousePosition, camera);
+      if (currentModel instanceof THREE.Points) {
+        const geometry = currentModel.geometry;
+        const position = geometry.getAttribute("position");
+        if (!position) {
+          return undefined;
+        }
+
+        const direction = raycaster.ray.direction.clone().normalize();
+        let bestPoint: THREE.Vector3 | undefined;
+        let bestRayLength = Number.POSITIVE_INFINITY;
+        const maxPerpendicularDistance = 0.35;
+
+        for (let index = 0; index < position.count; index += 1) {
+          const localPoint = new THREE.Vector3(
+            position.getX(index),
+            position.getY(index),
+            position.getZ(index),
+          );
+          const worldPoint = localPoint.applyMatrix4(currentModel.matrixWorld);
+          const toPoint = worldPoint.clone().sub(raycaster.ray.origin);
+          const rayLength = toPoint.dot(direction);
+          if (rayLength < 0) {
+            continue;
+          }
+
+          const closestPoint = raycaster.ray.origin
+            .clone()
+            .add(direction.clone().multiplyScalar(rayLength));
+          const perpendicularDistance = worldPoint.distanceTo(closestPoint);
+          if (
+            perpendicularDistance <= maxPerpendicularDistance &&
+            rayLength < bestRayLength
+          ) {
+            bestRayLength = rayLength;
+            bestPoint = worldPoint;
+          }
+        }
+
+        if (!bestPoint) {
+          return undefined;
+        }
+        return [bestPoint.x, bestPoint.y, bestPoint.z];
+      }
+
+      const hit = raycaster.intersectObject(currentModel, true)[0];
+      if (!hit || distancePointToRay(hit.point, raycaster.ray) > 0.35) {
+        return undefined;
+      }
+      return [hit.point.x, hit.point.y, hit.point.z];
     }
 
     async function loadPly(data: ArrayBuffer, fileName: string): Promise<void> {
@@ -115,16 +206,20 @@ if (canvas && plyUrlNode) {
           geometry.computeVertexNormals();
         }
 
+        geometry.computeBoundingBox();
+        const box = geometry.boundingBox;
+        if (box) {
+          const center = box.getCenter(new THREE.Vector3());
+          currentModelCenter = [center.x, center.y, center.z];
+          cameraTarget = currentModelCenter;
+        }
+
         let radiusFromOrigin = 0;
         for (let index = 0; index < position.count; index += 1) {
-          radiusFromOrigin = Math.max(
-            radiusFromOrigin,
-            Math.hypot(
-              position.getX(index),
-              position.getY(index),
-              position.getZ(index),
-            ),
-          );
+          const x = position.getX(index) - cameraTarget[0];
+          const y = position.getY(index) - cameraTarget[1];
+          const z = position.getZ(index) - cameraTarget[2];
+          radiusFromOrigin = Math.max(radiusFromOrigin, Math.hypot(x, y, z));
         }
         radiusFromOrigin = Math.max(radiusFromOrigin, 0.01);
 
@@ -135,9 +230,9 @@ if (canvas && plyUrlNode) {
         const cameraDistance = (radiusFromOrigin / Math.sin(fitHalfFov)) * 1.15;
         const initialDirection = normalize([1, 1, 1], [1, 0, 0]);
         cameraPosition = [
-          initialDirection[0] * cameraDistance,
-          initialDirection[1] * cameraDistance,
-          initialDirection[2] * cameraDistance,
+          cameraTarget[0] + initialDirection[0] * cameraDistance,
+          cameraTarget[1] + initialDirection[1] * cameraDistance,
+          cameraTarget[2] + initialDirection[2] * cameraDistance,
         ];
         camera.near = Math.max(0.001, cameraDistance - radiusFromOrigin * 1.5);
         camera.far = cameraDistance + radiusFromOrigin * 1.5;
@@ -257,6 +352,10 @@ if (canvas && plyUrlNode) {
         case "Numpad2":
           rotateCamera(right, -rotationStep);
           break;
+        case ".":
+        case "Period":
+          centerCameraTargetOnModel();
+          break;
         default:
           return;
       }
@@ -266,7 +365,30 @@ if (canvas && plyUrlNode) {
     });
 
     viewerCanvas.addEventListener("pointerdown", (event) => {
-      if (event.button !== 0 || activePointer !== undefined) {
+      if (event.button !== 0) {
+        return;
+      }
+
+      if (event.ctrlKey) {
+        const bounds = viewerCanvas.getBoundingClientRect();
+        mousePosition.x =
+          ((event.clientX - bounds.left) / bounds.width) * 2 - 1;
+        mousePosition.y =
+          -((event.clientY - bounds.top) / bounds.height) * 2 + 1;
+
+        const targetFromPointer = resolvePointerTargetFromRay();
+        if (!targetFromPointer) {
+          return;
+        }
+
+        cameraTarget = targetFromPointer;
+        syncCamera();
+        scheduleRender();
+        event.preventDefault();
+        return;
+      }
+
+      if (activePointer !== undefined) {
         return;
       }
       activePointer = event.pointerId;
@@ -373,6 +495,16 @@ function rotateAroundAxis(
       crossProduct[2] * sine +
       normalizedAxis[2] * projection,
   ];
+}
+
+function distancePointToRay(point: THREE.Vector3, ray: THREE.Ray): number {
+  const direction = ray.direction.clone().normalize();
+  const toPoint = point.clone().sub(ray.origin);
+  const projection = toPoint.dot(direction);
+  const closestPoint = ray.origin
+    .clone()
+    .add(direction.clone().multiplyScalar(projection));
+  return point.distanceTo(closestPoint);
 }
 
 function dot(left: Vector3Tuple, right: Vector3Tuple): number {
