@@ -147,9 +147,10 @@ if (canvas && plyUrlNode) {
         }
 
         const direction = raycaster.ray.direction.clone().normalize();
+        const coneHalfAngle = THREE.MathUtils.degToRad(1.5);
+        const maxRayLength = 50;
         let bestPoint: THREE.Vector3 | undefined;
         let bestRayLength = Number.POSITIVE_INFINITY;
-        const maxPerpendicularDistance = 0.35;
 
         for (let index = 0; index < position.count; index += 1) {
           const localPoint = new THREE.Vector3(
@@ -158,20 +159,24 @@ if (canvas && plyUrlNode) {
             position.getZ(index),
           );
           const worldPoint = localPoint.applyMatrix4(currentModel.matrixWorld);
-          const toPoint = worldPoint.clone().sub(raycaster.ray.origin);
-          const rayLength = toPoint.dot(direction);
-          if (rayLength < 0) {
+          const offset = worldPoint.clone().sub(raycaster.ray.origin);
+          const rayLength = offset.dot(direction);
+
+          if (rayLength <= 0 || rayLength > maxRayLength) {
             continue;
           }
 
-          const closestPoint = raycaster.ray.origin
-            .clone()
-            .add(direction.clone().multiplyScalar(rayLength));
-          const perpendicularDistance = worldPoint.distanceTo(closestPoint);
-          if (
-            perpendicularDistance <= maxPerpendicularDistance &&
-            rayLength < bestRayLength
-          ) {
+          const projectedLength = offset.length();
+          if (projectedLength === 0) {
+            continue;
+          }
+
+          const cosTheta = rayLength / projectedLength;
+          if (cosTheta < Math.cos(coneHalfAngle)) {
+            continue;
+          }
+
+          if (rayLength < bestRayLength) {
             bestRayLength = rayLength;
             bestPoint = worldPoint;
           }
