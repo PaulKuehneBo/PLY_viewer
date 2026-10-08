@@ -6,6 +6,10 @@ type Vector3Tuple = [number, number, number];
 const canvas = document.querySelector<HTMLCanvasElement>("#viewer");
 const plyUrlNode = document.querySelector<HTMLScriptElement>("#ply-url");
 const statusNode = document.querySelector<HTMLDivElement>("#viewer-status");
+const filePicker = document.querySelector<HTMLInputElement>("#ply-file-picker");
+const openFileButton = document.querySelector<HTMLButtonElement>("#open-ply");
+const selectedFileNode =
+  document.querySelector<HTMLSpanElement>("#selected-file");
 
 function setStatus(message: string): void {
   if (statusNode) {
@@ -17,6 +21,9 @@ function setStatus(message: string): void {
 if (canvas && plyUrlNode) {
   const viewerCanvas = canvas;
   const plyUrlElement = plyUrlNode;
+  const plyFilePicker = filePicker;
+  const plyOpenFileButton = openFileButton;
+  const selectedPlyFileNode = selectedFileNode;
   try {
     const renderer = new THREE.WebGLRenderer({
       canvas: viewerCanvas,
@@ -53,6 +60,7 @@ if (canvas && plyUrlNode) {
     let activePointer: number | undefined;
     let previousPointerX = 0;
     let previousPointerY = 0;
+    let currentModel: THREE.Mesh | THREE.Points | undefined;
 
     function syncCamera(): void {
       camera.position.set(...cameraPosition);
@@ -91,22 +99,9 @@ if (canvas && plyUrlNode) {
       syncCamera();
     }
 
-    async function loadPly(): Promise<void> {
-      let plyUrl: string;
+    async function loadPly(data: ArrayBuffer, fileName: string): Promise<void> {
+      setStatus(`Loading ${fileName}…`);
       try {
-        plyUrl = JSON.parse(plyUrlElement.textContent ?? "") as string;
-      } catch {
-        setStatus("Invalid PLY resource URL.");
-        return;
-      }
-
-      setStatus("Loading PLY…");
-      try {
-        const response = await fetch(plyUrl);
-        if (!response.ok) {
-          throw new Error(`Request failed with status ${response.status}.`);
-        }
-        const data = await response.arrayBuffer();
         const hasFaces = readFaceCount(data) > 0;
         const geometry = new PLYLoader().parse(data);
         const position = geometry.getAttribute("position");
@@ -150,6 +145,7 @@ if (canvas && plyUrlNode) {
         syncCamera();
 
         const hasVertexColors = geometry.getAttribute("color") !== undefined;
+        let model: THREE.Mesh | THREE.Points;
         if (hasFaces) {
           const material = new THREE.MeshStandardMaterial({
             color: hasVertexColors ? 0xffffff : 0x5eb8aa,
@@ -158,7 +154,7 @@ if (canvas && plyUrlNode) {
             metalness: 0,
             side: THREE.DoubleSide,
           });
-          scene.add(new THREE.Mesh(geometry, material));
+          model = new THREE.Mesh(geometry, material);
         } else {
           const material = new THREE.PointsMaterial({
             color: hasVertexColors ? 0xffffff : 0xa7d8cc,
@@ -166,9 +162,16 @@ if (canvas && plyUrlNode) {
             sizeAttenuation: false,
             vertexColors: hasVertexColors,
           });
-          scene.add(new THREE.Points(geometry, material));
+          model = new THREE.Points(geometry, material);
         }
 
+        disposeCurrentModel();
+        currentModel = model;
+        scene.add(model);
+        if (selectedPlyFileNode) {
+          selectedPlyFileNode.textContent = fileName;
+          selectedPlyFileNode.title = fileName;
+        }
         setStatus("");
         render();
         viewerCanvas.focus();
@@ -176,6 +179,49 @@ if (canvas && plyUrlNode) {
         const detail = error instanceof Error ? ` ${error.message}` : "";
         setStatus(`Could not load PLY file.${detail}`);
         console.error("[PLY Viewer] PLYLoader failed:", error);
+      }
+    }
+
+    function disposeCurrentModel(): void {
+      if (!currentModel) {
+        return;
+      }
+      scene.remove(currentModel);
+      currentModel.geometry.dispose();
+      if (Array.isArray(currentModel.material)) {
+        currentModel.material.forEach((material) => material.dispose());
+      } else {
+        currentModel.material.dispose();
+      }
+      currentModel = undefined;
+    }
+
+    async function loadEmbeddedPly(): Promise<void> {
+      let plyUrl: string;
+      try {
+        plyUrl = JSON.parse(plyUrlElement.textContent ?? "") as string;
+      } catch {
+        setStatus("Invalid PLY resource URL.");
+        return;
+      }
+      if (!plyUrl) {
+        setStatus("Choose a PLY file to display.");
+        return;
+      }
+
+      try {
+        const response = await fetch(plyUrl);
+        if (!response.ok) {
+          throw new Error(`Request failed with status ${response.status}.`);
+        }
+        await loadPly(
+          await response.arrayBuffer(),
+          plyUrl.split("/").pop() ?? "PLY file",
+        );
+      } catch (error) {
+        const detail = error instanceof Error ? ` ${error.message}` : "";
+        setStatus(`Could not load PLY file.${detail}`);
+        console.error("[PLY Viewer] PLY request failed:", error);
       }
     }
 
@@ -265,7 +311,16 @@ if (canvas && plyUrlNode) {
 
     viewerCanvas.addEventListener("pointerup", endPointer);
     viewerCanvas.addEventListener("pointercancel", endPointer);
-    void loadPly();
+    plyOpenFileButton?.addEventListener("click", () => plyFilePicker?.click());
+    plyFilePicker?.addEventListener("change", async () => {
+      const file = plyFilePicker.files?.[0];
+      if (!file) {
+        return;
+      }
+      await loadPly(await file.arrayBuffer(), file.name);
+      plyFilePicker.value = "";
+    });
+    void loadEmbeddedPly();
   } catch (error) {
     const detail = error instanceof Error ? ` ${error.message}` : "";
     setStatus(`WebGL renderer could not start.${detail}`);

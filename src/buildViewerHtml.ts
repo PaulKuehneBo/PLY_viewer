@@ -63,6 +63,41 @@ export function buildPlyViewerHtml(
 					background: radial-gradient(circle at center, #111827 0%, #020817 100%);
 					cursor: grab;
 				}
+				#viewer-toolbar {
+					position: fixed;
+					z-index: 2;
+					top: 12px;
+					left: 12px;
+					display: flex;
+					align-items: center;
+					gap: 10px;
+					max-width: calc(100vw - 24px);
+					color: #e2e8f0;
+					font-size: 13px;
+				}
+				#open-ply {
+					border: 1px solid #527c7c;
+					border-radius: 4px;
+					padding: 7px 11px;
+					background: #183437;
+					color: #effafa;
+					font: inherit;
+					cursor: pointer;
+				}
+				#open-ply:hover { background: #24494b; }
+				#selected-file {
+					overflow: hidden;
+					text-overflow: ellipsis;
+					white-space: nowrap;
+				}
+				#viewer-status {
+					position: fixed;
+					z-index: 1;
+					top: 56px;
+					left: 12px;
+					color: #e2e8f0;
+					font-size: 13px;
+				}
 				canvas.dragging {
 					cursor: grabbing;
 				}
@@ -70,6 +105,11 @@ export function buildPlyViewerHtml(
 		</head>
 		<body>
 			<canvas id="viewer" tabindex="0"></canvas>
+			<div id="viewer-toolbar">
+				<button id="open-ply" type="button">Open PLY</button>
+				<input id="ply-file-picker" type="file" accept=".ply" hidden />
+				<span id="selected-file"></span>
+			</div>
 			<div id="viewer-status" role="status">Loading PLY…</div>
 			<script id="ply-url" type="application/json">${JSON.stringify(plyFileUrl)}</script>
 			<script nonce="${nonce}" type="importmap">

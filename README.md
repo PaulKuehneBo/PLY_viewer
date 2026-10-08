@@ -16,7 +16,7 @@ VS-Code-Erweiterung zum Anzeigen von PLY-Punktwolken und Meshes in einem Webview
 ## Aufbau
 
 - `src/extension.ts` aktiviert die Erweiterung, registriert den Dateiauswahlbefehl und öffnet den Webview.
-- `src/extension.ts` öffnet den Viewer und erlaubt dem Webview, die ausgewählte lokale PLY-Datei zu laden.
+- Der Extension Host übergibt die PLY-URI; der Webview lädt die Datei direkt mit `PLYLoader`.
 - `src/plyParser.ts` ist der frühere zeilenbasierte ASCII-Parser und wird vom aktuellen Viewer nicht mehr verwendet.
 - `src/buildViewerHtml.ts` erstellt das Webview-HTML, setzt die Content Security Policy und Import Map für Three.js sowie die PLY-Datei-URL.
 - `src/webview/index.ts` enthält `PLYLoader`, WebGL-Szene, PerspectiveCamera sowie die eigene Tastatur- und Pointer-Steuerung.
@@ -51,6 +51,17 @@ Die zentralen Angaben in `package.json`:
 4. Im Extension Development Host eine `.ply`-Datei öffnen. Alternativ den Befehl **Open Posed Camera PLY Viewer** aus der Befehlspalette aufrufen.
 
 Die Debug-Konfiguration in `.vscode/launch.json` verwendet `--new-window`, `--disable-extensions` sowie separate `--user-data-dir`- und `--extensions-dir`-Pfade unter `.vscode-test/`. Der Entwicklungspfad dieser Erweiterung wird weiterhin über `--extensionDevelopmentPath` geladen.
+
+## Standalone in Edge
+
+Der Harness `webgl-harness.html` kann unabhängig vom Extension Host im Browser laufen. Wegen der ES-Module und Import Map sollte die HTML-Datei nicht direkt über `file://` geöffnet werden.
+
+1. Im Extension-Projekt `npm run compile` ausführen.
+2. Im Projektordner einen lokalen Server starten: `python -m http.server 4179 --bind 127.0.0.1`.
+3. In Edge `http://127.0.0.1:4179/webgl-harness.html` öffnen.
+4. **PLY-Datei öffnen** wählen und eine lokale `.ply`-Datei auswählen. Die Datei wird nur lokal im Browser gelesen und nicht hochgeladen.
+
+Der Harness startet ohne fest ausgewählte Datei. Die Extension-Webview kann weiterhin eine beim Öffnen übergebene PLY-Datei direkt laden; beide Varianten teilen sich denselben WebGL-Renderer und dieselben Kamera-Controls.
 
 ## Besprochene Probleme und aktueller Workaround
 

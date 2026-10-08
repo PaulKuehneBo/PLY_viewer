@@ -1,23 +1,32 @@
 <!doctype html>
-<html lang="en">
+<html lang="de">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>PLY WebGL harness</title>
+  <title>PLY WebGL Viewer</title>
   <style>
     html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #020817; }
     canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
     canvas.dragging { cursor: grabbing; }
-    #viewer-status { position: fixed; z-index: 1; top: 12px; left: 12px; color: white; font: 14px sans-serif; }
+    #viewer-toolbar { position: fixed; z-index: 2; top: 12px; left: 12px; display: flex; align-items: center; gap: 10px; max-width: calc(100vw - 24px); color: #e2e8f0; font: 13px sans-serif; }
+    #open-ply { border: 1px solid #527c7c; border-radius: 4px; padding: 7px 11px; background: #183437; color: #effafa; font: inherit; cursor: pointer; }
+    #open-ply:hover { background: #24494b; }
+    #selected-file { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #viewer-status { position: fixed; z-index: 1; top: 56px; left: 12px; color: #e2e8f0; font: 13px sans-serif; }
   </style>
   <script type="importmap">
-    {"imports":{"three":"/PLY_Viewer/posed-camera/node_modules/three/build/three.module.js","three/addons/":"/PLY_Viewer/posed-camera/node_modules/three/examples/jsm/"}}
+    {"imports":{"three":"./node_modules/three/build/three.module.js","three/addons/":"./node_modules/three/examples/jsm/"}}
   </script>
 </head>
 <body>
   <canvas id="viewer" tabindex="0"></canvas>
-  <div id="viewer-status" role="status">Loading PLY...</div>
-  <script id="ply-url" type="application/json">"/images/factory.ply"</script>
-  <script type="module" src="/PLY_Viewer/posed-camera/out/webview/index.js"></script>
+  <div id="viewer-toolbar">
+    <button id="open-ply" type="button">PLY-Datei öffnen</button>
+    <input id="ply-file-picker" type="file" accept=".ply" hidden>
+    <span id="selected-file"></span>
+  </div>
+  <div id="viewer-status" role="status">PLY-Datei auswählen.</div>
+  <script id="ply-url" type="application/json">""</script>
+  <script type="module" src="./out/webview/index.js"></script>
 </body>
 </html>
