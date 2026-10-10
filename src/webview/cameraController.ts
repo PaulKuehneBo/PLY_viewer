@@ -103,18 +103,12 @@ export function createCameraController(
   }
 
   function fitGeometryAroundTarget(
-    geometry: THREE.BufferGeometry,
+    geometries: readonly THREE.BufferGeometry[],
     width: number,
     height: number,
     fieldOfView: number,
   ): void {
-    const position = geometry.getAttribute("position");
-    if (!position || position.count === 0 || width <= 0 || height <= 0) {
-      return;
-    }
-
-    geometry.computeBoundingBox();
-    if (!geometry.boundingBox) {
+    if (geometries.length === 0 || width <= 0 || height <= 0) {
       return;
     }
 
@@ -127,15 +121,24 @@ export function createCameraController(
     }
 
     let radius = 0;
-    for (let index = 0; index < position.count; index += 1) {
-      radius = Math.max(
-        radius,
-        Math.hypot(
-          position.getX(index) - cameraTarget.x,
-          position.getY(index) - cameraTarget.y,
-          position.getZ(index) - cameraTarget.z,
-        ),
-      );
+    for (const geometry of geometries) {
+      const position = geometry.getAttribute("position");
+      if (!position) {
+        continue;
+      }
+      for (let index = 0; index < position.count; index += 1) {
+        radius = Math.max(
+          radius,
+          Math.hypot(
+            position.getX(index) - cameraTarget.x,
+            position.getY(index) - cameraTarget.y,
+            position.getZ(index) - cameraTarget.z,
+          ),
+        );
+      }
+    }
+    if (radius === 0) {
+      return;
     }
     radius = Math.max(radius, 0.01);
 
@@ -158,33 +161,43 @@ export function createCameraController(
   }
 
   function frameGeometry(
-    geometry: THREE.BufferGeometry,
+    geometries: readonly THREE.BufferGeometry[],
     width: number,
     height: number,
     fieldOfView: number,
   ): void {
-    const position = geometry.getAttribute("position");
-    if (!position || position.count === 0) {
+    if (geometries.length === 0 || width <= 0 || height <= 0) {
       return;
     }
 
-    geometry.computeBoundingBox();
-    const bounds = geometry.boundingBox;
-    if (!bounds) {
+    const bounds = new THREE.Box3().makeEmpty();
+    for (const geometry of geometries) {
+      geometry.computeBoundingBox();
+      if (geometry.boundingBox) {
+        bounds.union(geometry.boundingBox);
+      }
+    }
+    if (bounds.isEmpty()) {
       return;
     }
 
     cameraTarget.copy(bounds.getCenter(new THREE.Vector3()));
     let radius = 0;
-    for (let index = 0; index < position.count; index += 1) {
-      radius = Math.max(
-        radius,
-        Math.hypot(
-          position.getX(index) - cameraTarget.x,
-          position.getY(index) - cameraTarget.y,
-          position.getZ(index) - cameraTarget.z,
-        ),
-      );
+    for (const geometry of geometries) {
+      const position = geometry.getAttribute("position");
+      if (!position) {
+        continue;
+      }
+      for (let index = 0; index < position.count; index += 1) {
+        radius = Math.max(
+          radius,
+          Math.hypot(
+            position.getX(index) - cameraTarget.x,
+            position.getY(index) - cameraTarget.y,
+            position.getZ(index) - cameraTarget.z,
+          ),
+        );
+      }
     }
     radius = Math.max(radius, 0.01);
     const aspect = width / height;

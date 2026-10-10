@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { createCameraController } from "./cameraController.js";
-import { createPlyModel, disposePlyModel } from "./plyModel.js";
+import { createPlyModel } from "./plyModel.js";
 import { resolvePointerTarget } from "./pointTargeting.js";
 import { createViewerScene } from "./viewerScene.js";
 
@@ -11,6 +11,10 @@ const filePicker = document.querySelector<HTMLInputElement>("#ply-file-picker");
 const openFileButton = document.querySelector<HTMLButtonElement>("#open-ply");
 const selectedFileNode =
   document.querySelector<HTMLSpanElement>("#selected-file");
+const modelListPanel = document.querySelector<HTMLElement>("#model-list-panel");
+const modelListToggle =
+  document.querySelector<HTMLButtonElement>("#toggle-model-list");
+const modelListNode = document.querySelector<HTMLUListElement>("#model-list");
 const modelInfoPanel = document.querySelector<HTMLElement>("#model-info");
 const modelInfoToggle =
   document.querySelector<HTMLButtonElement>("#toggle-model-info");
@@ -28,6 +32,15 @@ modelInfoToggle?.addEventListener("click", () => {
   );
   modelInfoToggle.title = collapsed ? "Expand" : "Minimize";
   modelInfoToggle.textContent = collapsed ? "+" : "−";
+});
+
+modelListToggle?.addEventListener("click", () => {
+  const collapsed = modelListPanel?.classList.toggle("collapsed") ?? false;
+  modelListToggle.setAttribute("aria-expanded", String(!collapsed));
+  modelListToggle.textContent = collapsed ? "+" : "−";
+  modelListToggle.title = collapsed
+    ? "Expand model list"
+    : "Minimize model list";
 });
 
 function setStatus(message: string): void {
@@ -57,7 +70,9 @@ if (canvas && plyUrlNode) {
     let activePointerMode: "orbit" | "pan" = "orbit";
     let previousPointerX = 0;
     let previousPointerY = 0;
-    let currentModel: THREE.Mesh | THREE.Points | undefined;
+    const models: Array<{
+      model: THREE.Mesh | THREE.Points;
+    }> = [];
 
     async function loadPly(data: ArrayBuffer, fileName: string): Promise<void> {
       setStatus(`Loading ${fileName}…`);
@@ -68,16 +83,20 @@ if (canvas && plyUrlNode) {
           return;
         }
 
-        updateModelInfo(model.geometry);
-        cameraController.frameGeometry(
-          model.geometry,
-          window.innerWidth,
-          window.innerHeight,
-          fieldOfView,
-        );
-        disposeCurrentModel();
-        currentModel = model;
+        const isFirstModel = models.length === 0;
+        model.name = fileName;
         scene.add(model);
+        models.push({ model });
+        addModelEntry(fileName, model);
+        updateModelInfo(model.geometry);
+        if (isFirstModel) {
+          cameraController.frameGeometry(
+            [model.geometry],
+            window.innerWidth,
+            window.innerHeight,
+            fieldOfView,
+          );
+        }
         if (selectedPlyFileNode) {
           selectedPlyFileNode.textContent = fileName;
           selectedPlyFileNode.title = fileName;
@@ -92,13 +111,37 @@ if (canvas && plyUrlNode) {
       }
     }
 
-    function disposeCurrentModel(): void {
-      if (!currentModel) {
-        return;
-      }
-      scene.remove(currentModel);
-      disposePlyModel(currentModel);
-      currentModel = undefined;
+    function addModelEntry(
+      name: string,
+      model: THREE.Mesh | THREE.Points,
+    ): void {
+      const item = document.createElement("li");
+      item.className = "model-entry";
+      const label = document.createElement("label");
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = true;
+      checkbox.setAttribute("aria-label", `Show ${name}`);
+      checkbox.addEventListener("change", () => {
+        model.visible = checkbox.checked;
+        scheduleRender();
+      });
+      const nameNode = document.createElement("span");
+      nameNode.textContent = name;
+      nameNode.title = name;
+      label.append(checkbox, nameNode);
+      item.append(label);
+      modelListNode?.append(item);
+    }
+
+    function getVisibleModels(): (THREE.Mesh | THREE.Points)[] {
+      return models
+        .filter(({ model }) => model.visible)
+        .map(({ model }) => model);
+    }
+
+    function getVisibleGeometries(): THREE.BufferGeometry[] {
+      return getVisibleModels().map((model) => model.geometry);
     }
 
     async function loadEmbeddedPly(): Promise<void> {
@@ -170,25 +213,30 @@ if (canvas && plyUrlNode) {
           cameraController.rotate(right, -rotationStep);
           break;
         case ".":
-        case "Period":
-          if (currentModel) {
+        case "Period": {
+          const visibleGeometries = getVisibleGeometries();
+          if (visibleGeometries.length > 0) {
             cameraController.fitGeometryAroundTarget(
-              currentModel.geometry,
+              visibleGeometries,
               window.innerWidth,
               window.innerHeight,
               fieldOfView,
             );
           }
           break;
+        }
         case "0":
         case "Numpad0":
-          if (currentModel) {
-            cameraController.frameGeometry(
-              currentModel.geometry,
-              window.innerWidth,
-              window.innerHeight,
-              fieldOfView,
-            );
+          {
+            const visibleGeometries = getVisibleGeometries();
+            if (visibleGeometries.length > 0) {
+              cameraController.frameGeometry(
+                visibleGeometries,
+                window.innerWidth,
+                window.innerHeight,
+                fieldOfView,
+              );
+            }
           }
           break;
         case "z":
@@ -209,7 +257,7 @@ if (canvas && plyUrlNode) {
         const targetFromPointer = resolvePointerTarget(
           viewerCanvas,
           camera,
-          currentModel,
+          getVisibleModels(),
           event.clientX,
           event.clientY,
         );
@@ -283,11 +331,10 @@ if (canvas && plyUrlNode) {
     viewerCanvas.addEventListener("pointercancel", endPointer);
     plyOpenFileButton?.addEventListener("click", () => plyFilePicker?.click());
     plyFilePicker?.addEventListener("change", async () => {
-      const file = plyFilePicker.files?.[0];
-      if (!file) {
-        return;
+      const files = Array.from(plyFilePicker.files ?? []);
+      for (const file of files) {
+        await loadPly(await file.arrayBuffer(), file.name);
       }
-      await loadPly(await file.arrayBuffer(), file.name);
       plyFilePicker.value = "";
     });
     void loadEmbeddedPly();
