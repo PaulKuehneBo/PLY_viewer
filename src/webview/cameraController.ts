@@ -2,6 +2,7 @@ import * as THREE from "three";
 
 const INITIAL_DIRECTION = new THREE.Vector3(1, 1, 1).normalize();
 const WORLD_UP = new THREE.Vector3(0, 0, 1);
+const MODEL_VIEWPORT_FILL = 0.9;
 
 export function createCameraController(
   camera: THREE.PerspectiveCamera,
@@ -71,12 +72,56 @@ export function createCameraController(
     syncCamera();
   }
 
-  function centerTargetOnGeometry(geometry: THREE.BufferGeometry): void {
+  function fitGeometryAroundTarget(
+    geometry: THREE.BufferGeometry,
+    width: number,
+    height: number,
+    fieldOfView: number,
+  ): void {
+    const position = geometry.getAttribute("position");
+    if (!position || position.count === 0 || width <= 0 || height <= 0) {
+      return;
+    }
+
     geometry.computeBoundingBox();
     if (!geometry.boundingBox) {
       return;
     }
-    setTarget(geometry.boundingBox.getCenter(new THREE.Vector3()));
+
+    const viewingDirection = cameraPosition
+      .clone()
+      .sub(cameraTarget)
+      .normalize();
+    if (viewingDirection.lengthSq() === 0) {
+      viewingDirection.copy(INITIAL_DIRECTION);
+    }
+
+    let radius = 0;
+    for (let index = 0; index < position.count; index += 1) {
+      radius = Math.max(
+        radius,
+        Math.hypot(
+          position.getX(index) - cameraTarget.x,
+          position.getY(index) - cameraTarget.y,
+          position.getZ(index) - cameraTarget.z,
+        ),
+      );
+    }
+    radius = Math.max(radius, 0.01);
+
+    const aspect = width / height;
+    const verticalHalfFov = THREE.MathUtils.degToRad(fieldOfView / 2);
+    const horizontalHalfFov = Math.atan(Math.tan(verticalHalfFov) * aspect);
+    const fitHalfFov = Math.min(verticalHalfFov, horizontalHalfFov);
+    const cameraDistance =
+      radius / (Math.sin(fitHalfFov) * MODEL_VIEWPORT_FILL);
+    cameraPosition
+      .copy(cameraTarget)
+      .addScaledVector(viewingDirection, cameraDistance);
+    camera.near = Math.max(0.001, cameraDistance - radius * 1.5);
+    camera.far = cameraDistance + radius * 1.5;
+    camera.updateProjectionMatrix();
+    syncCamera();
     camera.lookAt(cameraTarget);
     cameraUp.copy(camera.up);
     scheduleRender();
@@ -138,7 +183,7 @@ export function createCameraController(
     rotate,
     setTarget,
     panView,
-    centerTargetOnGeometry,
+    fitGeometryAroundTarget,
     frameGeometry,
   };
 }

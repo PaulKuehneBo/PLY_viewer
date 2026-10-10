@@ -141,7 +141,23 @@ if (canvas && plyUrlNode) {
         case ".":
         case "Period":
           if (currentModel) {
-            cameraController.centerTargetOnGeometry(currentModel.geometry);
+            cameraController.fitGeometryAroundTarget(
+              currentModel.geometry,
+              window.innerWidth,
+              window.innerHeight,
+              fieldOfView,
+            );
+          }
+          break;
+        case "0":
+        case "Numpad0":
+          if (currentModel) {
+            cameraController.frameGeometry(
+              currentModel.geometry,
+              window.innerWidth,
+              window.innerHeight,
+              fieldOfView,
+            );
           }
           break;
         default:
