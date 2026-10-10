@@ -36,6 +36,7 @@ if (canvas && plyUrlNode) {
     );
     const rotationStep = Math.PI / 36;
     let activePointer: number | undefined;
+    let activePointerMode: "orbit" | "pan" = "orbit";
     let previousPointerX = 0;
     let previousPointerY = 0;
     let currentModel: THREE.Mesh | THREE.Points | undefined;
@@ -152,11 +153,7 @@ if (canvas && plyUrlNode) {
     });
 
     viewerCanvas.addEventListener("pointerdown", (event) => {
-      if (event.button !== 0) {
-        return;
-      }
-
-      if (event.ctrlKey) {
+      if (event.button === 0 && event.ctrlKey) {
         const targetFromPointer = resolvePointerTarget(
           viewerCanvas,
           camera,
@@ -174,10 +171,15 @@ if (canvas && plyUrlNode) {
         return;
       }
 
-      if (activePointer !== undefined) {
+      if (
+        (event.button !== 0 && event.button !== 1) ||
+        activePointer !== undefined
+      ) {
         return;
       }
+
       activePointer = event.pointerId;
+      activePointerMode = event.button === 1 ? "pan" : "orbit";
       previousPointerX = event.clientX;
       previousPointerY = event.clientY;
       viewerCanvas.setPointerCapture(event.pointerId);
@@ -195,6 +197,13 @@ if (canvas && plyUrlNode) {
       const deltaY = event.clientY - previousPointerY;
       previousPointerX = event.clientX;
       previousPointerY = event.clientY;
+
+      if (activePointerMode === "pan") {
+        cameraController.panView(deltaX, deltaY, viewerCanvas.clientHeight);
+        scheduleRender();
+        return;
+      }
+
       const sensitivity = 0.005;
       const { right, up } = cameraController.basis();
 

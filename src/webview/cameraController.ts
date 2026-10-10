@@ -15,34 +15,59 @@ export function createCameraController(
   function syncCamera(): void {
     camera.position.copy(cameraPosition);
     camera.up.copy(cameraUp);
-    camera.lookAt(cameraTarget);
     targetAxes.position.copy(cameraTarget);
   }
 
   function basis(): { right: THREE.Vector3; up: THREE.Vector3 } {
-    const viewDirection = cameraTarget.clone().sub(cameraPosition).normalize();
-    const right = new THREE.Vector3().crossVectors(viewDirection, cameraUp);
-    if (right.lengthSq() < 1e-16) {
-      right.set(0, 1, 0);
-    } else {
-      right.normalize();
-    }
-    const up = new THREE.Vector3()
-      .crossVectors(right, viewDirection)
-      .normalize();
+    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
     return { right, up };
   }
 
   function rotate(axis: THREE.Vector3, angle: number): void {
+    const normalizedAxis = axis.clone().normalize();
+    const rotation = new THREE.Quaternion().setFromAxisAngle(
+      normalizedAxis,
+      angle,
+    );
     const relativePosition = cameraPosition.clone().sub(cameraTarget);
-    relativePosition.applyAxisAngle(axis.clone().normalize(), angle);
+    relativePosition.applyQuaternion(rotation);
     cameraPosition.copy(cameraTarget).add(relativePosition);
-    cameraUp.applyAxisAngle(axis.clone().normalize(), angle).normalize();
+    cameraUp.applyQuaternion(rotation).normalize();
+    camera.quaternion.premultiply(rotation).normalize();
     syncCamera();
   }
 
   function setTarget(target: THREE.Vector3): void {
     cameraTarget.copy(target);
+    syncCamera();
+  }
+
+  function panView(
+    deltaX: number,
+    deltaY: number,
+    viewportHeight: number,
+  ): void {
+    if (viewportHeight <= 0) {
+      return;
+    }
+
+    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(
+      camera.quaternion,
+    );
+    const depth = cameraTarget.clone().sub(cameraPosition).dot(forward);
+    if (depth <= 0) {
+      return;
+    }
+
+    const worldUnitsPerPixel =
+      (2 * depth * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) /
+      viewportHeight;
+    const { right, up } = basis();
+    const panOffset = new THREE.Vector3()
+      .addScaledVector(right, -deltaX * worldUnitsPerPixel)
+      .addScaledVector(up, deltaY * worldUnitsPerPixel);
+    cameraPosition.add(panOffset);
     syncCamera();
   }
 
@@ -52,6 +77,8 @@ export function createCameraController(
       return;
     }
     setTarget(geometry.boundingBox.getCenter(new THREE.Vector3()));
+    camera.lookAt(cameraTarget);
+    cameraUp.copy(camera.up);
     scheduleRender();
   }
 
@@ -98,14 +125,19 @@ export function createCameraController(
     camera.updateProjectionMatrix();
     cameraUp.copy(WORLD_UP);
     syncCamera();
+    camera.lookAt(cameraTarget);
+    cameraUp.copy(camera.up);
   }
 
   syncCamera();
+  camera.lookAt(cameraTarget);
+  cameraUp.copy(camera.up);
   return {
     syncCamera,
     basis,
     rotate,
     setTarget,
+    panView,
     centerTargetOnGeometry,
     frameGeometry,
   };
