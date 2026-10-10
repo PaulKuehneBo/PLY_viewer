@@ -66,5 +66,7 @@ Der Harness startet ohne fest ausgewählte Datei. Die Extension-Webview kann wei
 ## Besprochene Probleme und aktueller Workaround
 
 - **Extension Host schließt sofort:** Der Host wurde trotz deaktivierter installierter Erweiterungen als sofort endend beobachtet. Die genaue Ursache ist noch nicht nachgewiesen. Der aktuelle Workaround isoliert User-Daten und Erweiterungsverzeichnis, fordert ein neues Fenster an und deaktiviert regulär installierte Erweiterungen. Das ist eine Debug-Isolation, keine bestätigte Behebung eines möglichen Host-Absturzes. Bei erneutem Auftreten sind **Log (Extension Host)** und **Debug Console** die nächsten Diagnosequellen.
-- **Langsames Mesh-Rendering:** Der frühere Canvas-Pfad hat jedes Dreieck einzeln gezeichnet und pro Frame alle Dreiecke nach Tiefe sortiert. Der aktuelle WebGL-Pfad überlässt Rasterung und Verdeckung der GPU. PLY-Parsing selbst läuft weiterhin im Webview-Hauptthread.
-- **Rotation um falsche Achsen:** Die Steuerung verwendet jetzt den fortgeschriebenen Kamerastand. Die lokale Rechts- und Up-Achse werden aus der aktuellen Blickrichtung berechnet, sodass folgende Drehungen relativ zur bereits gedrehten Kamera erfolgen.
+
+## Installation der extension
+
+code --install-extension .\posed-camera.vsix
