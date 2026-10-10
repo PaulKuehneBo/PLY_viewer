@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { createCameraController } from "./cameraController.js";
-import { createPlyModel } from "./plyModel.js";
+import { createPlyModel, disposePlyModel } from "./plyModel.js";
 import { resolvePointerTarget } from "./pointTargeting.js";
 import { createViewerScene } from "./viewerScene.js";
 
@@ -9,12 +9,21 @@ const plyUrlNode = document.querySelector<HTMLScriptElement>("#ply-url");
 const statusNode = document.querySelector<HTMLDivElement>("#viewer-status");
 const filePicker = document.querySelector<HTMLInputElement>("#ply-file-picker");
 const openFileButton = document.querySelector<HTMLButtonElement>("#open-ply");
-const selectedFileNode =
-  document.querySelector<HTMLSpanElement>("#selected-file");
 const modelListPanel = document.querySelector<HTMLElement>("#model-list-panel");
 const modelListToggle =
   document.querySelector<HTMLButtonElement>("#toggle-model-list");
 const modelListNode = document.querySelector<HTMLUListElement>("#model-list");
+const removeModelDialog = document.querySelector<HTMLDialogElement>(
+  "#remove-model-dialog",
+);
+const removeModelNameNode =
+  document.querySelector<HTMLElement>("#remove-model-name");
+const confirmRemoveModelButton = document.querySelector<HTMLButtonElement>(
+  "#confirm-remove-model",
+);
+const cancelRemoveModelButton = document.querySelector<HTMLButtonElement>(
+  "#cancel-remove-model",
+);
 const modelInfoPanel = document.querySelector<HTMLElement>("#model-info");
 const modelInfoToggle =
   document.querySelector<HTMLButtonElement>("#toggle-model-info");
@@ -55,7 +64,6 @@ if (canvas && plyUrlNode) {
   const plyUrlElement = plyUrlNode;
   const plyFilePicker = filePicker;
   const plyOpenFileButton = openFileButton;
-  const selectedPlyFileNode = selectedFileNode;
   try {
     const viewer = createViewerScene(viewerCanvas);
     const { scene, camera, targetAxes, fieldOfView, render, scheduleRender } =
@@ -71,8 +79,11 @@ if (canvas && plyUrlNode) {
     let previousPointerX = 0;
     let previousPointerY = 0;
     const models: Array<{
+      name: string;
       model: THREE.Mesh | THREE.Points;
+      element: HTMLLIElement;
     }> = [];
+    let pendingRemoval: (typeof models)[number] | undefined;
 
     async function loadPly(data: ArrayBuffer, fileName: string): Promise<void> {
       setStatus(`Loading ${fileName}…`);
@@ -86,8 +97,11 @@ if (canvas && plyUrlNode) {
         const isFirstModel = models.length === 0;
         model.name = fileName;
         scene.add(model);
-        models.push({ model });
-        addModelEntry(fileName, model);
+        models.push({
+          name: fileName,
+          model,
+          element: addModelEntry(fileName, model),
+        });
         updateModelInfo(model.geometry);
         if (isFirstModel) {
           cameraController.frameGeometry(
@@ -96,10 +110,6 @@ if (canvas && plyUrlNode) {
             window.innerHeight,
             fieldOfView,
           );
-        }
-        if (selectedPlyFileNode) {
-          selectedPlyFileNode.textContent = fileName;
-          selectedPlyFileNode.title = fileName;
         }
         setStatus("");
         render();
@@ -114,7 +124,7 @@ if (canvas && plyUrlNode) {
     function addModelEntry(
       name: string,
       model: THREE.Mesh | THREE.Points,
-    ): void {
+    ): HTMLLIElement {
       const item = document.createElement("li");
       item.className = "model-entry";
       const label = document.createElement("label");
@@ -130,9 +140,58 @@ if (canvas && plyUrlNode) {
       nameNode.textContent = name;
       nameNode.title = name;
       label.append(checkbox, nameNode);
-      item.append(label);
+      const removeButton = document.createElement("button");
+      removeButton.className = "remove-model";
+      removeButton.type = "button";
+      removeButton.textContent = "×";
+      removeButton.title = `Remove ${name}`;
+      removeButton.setAttribute("aria-label", `Remove ${name}`);
+      removeButton.addEventListener("click", () => {
+        pendingRemoval = models.find((entry) => entry.model === model);
+        if (!pendingRemoval || !removeModelDialog) {
+          return;
+        }
+        if (removeModelNameNode) {
+          removeModelNameNode.textContent = pendingRemoval.name;
+        }
+        removeModelDialog.showModal();
+      });
+      item.append(label, removeButton);
       modelListNode?.append(item);
+      return item;
     }
+
+    confirmRemoveModelButton?.addEventListener("click", () => {
+      if (!pendingRemoval) {
+        return;
+      }
+      const { model, element } = pendingRemoval;
+      scene.remove(model);
+      disposePlyModel(model);
+      element.remove();
+      const modelIndex = models.findIndex((entry) => entry.model === model);
+      if (modelIndex >= 0) {
+        models.splice(modelIndex, 1);
+      }
+      pendingRemoval = undefined;
+      removeModelDialog?.close();
+
+      const visibleModels = getVisibleModels();
+      if (visibleModels.length > 0) {
+        updateModelInfo(visibleModels[0].geometry);
+      } else {
+        clearModelInfo();
+      }
+      scheduleRender();
+    });
+
+    cancelRemoveModelButton?.addEventListener("click", () => {
+      pendingRemoval = undefined;
+      removeModelDialog?.close();
+    });
+    removeModelDialog?.addEventListener("close", () => {
+      pendingRemoval = undefined;
+    });
 
     function getVisibleModels(): (THREE.Mesh | THREE.Points)[] {
       return models
@@ -367,5 +426,20 @@ function updateModelInfo(geometry: THREE.BufferGeometry): void {
   }
   if (dimensionZNode) {
     dimensionZNode.textContent = formatNumber.format(size.z);
+  }
+}
+
+function clearModelInfo(): void {
+  if (pointCountNode) {
+    pointCountNode.textContent = "—";
+  }
+  if (dimensionXNode) {
+    dimensionXNode.textContent = "—";
+  }
+  if (dimensionYNode) {
+    dimensionYNode.textContent = "—";
+  }
+  if (dimensionZNode) {
+    dimensionZNode.textContent = "—";
   }
 }

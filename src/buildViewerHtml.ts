@@ -78,11 +78,13 @@ export function buildPlyViewerHtml(
 				#model-list-panel {
 					position: fixed;
 					z-index: 2;
-					top: 86px;
-					bottom: 12px;
-					left: 12px;
+					top: 12px;
+					left: 160px;
 					width: min(250px, calc(100vw - 24px));
+					height: min(320px, calc(100vh - 24px));
 					box-sizing: border-box;
+					display: flex;
+					flex-direction: column;
 					border: 1px solid #48656a;
 					border-radius: 5px;
 					background: rgba(12, 22, 30, 0.94);
@@ -111,7 +113,8 @@ export function buildPlyViewerHtml(
 				}
 				#toggle-model-list:hover { background: #24494b; }
 				#model-list {
-					max-height: calc(100% - 38px);
+					flex: 1;
+					min-height: 0;
 					margin: 0;
 					padding: 4px 0;
 					list-style: none;
@@ -127,14 +130,65 @@ export function buildPlyViewerHtml(
 				}
 				.model-entry label:hover { background: #1b3035; }
 				.model-entry input { accent-color: #60b6a5; }
+				.model-entry {
+					display: flex;
+					align-items: center;
+					gap: 6px;
+					padding-right: 6px;
+				}
+				.model-entry label { flex: 1; min-width: 0; }
 				.model-entry span {
 					min-width: 0;
 					overflow: hidden;
 					text-overflow: ellipsis;
 					white-space: nowrap;
 				}
-				#model-list-panel.collapsed { bottom: auto; }
+				.remove-model {
+					flex: 0 0 28px;
+					width: 28px;
+					height: 28px;
+					border: 1px solid transparent;
+					border-radius: 3px;
+					background: transparent;
+					color: #f0a49a;
+					font: 20px/1 sans-serif;
+					cursor: pointer;
+				}
+				.remove-model:hover { border-color: #854c49; background: #482d30; }
+				#remove-model-dialog {
+					width: min(360px, calc(100vw - 48px));
+					box-sizing: border-box;
+					border: 1px solid #48656a;
+					border-radius: 6px;
+					padding: 18px;
+					background: #101c24;
+					color: #e2e8f0;
+					box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+				}
+				#remove-model-dialog::backdrop { background: rgba(0, 0, 0, 0.62); }
+				#remove-model-dialog h2 { margin: 0 0 10px; font-size: 16px; }
+				#remove-model-dialog p { margin: 0; color: #b8c9cc; overflow-wrap: anywhere; }
+				#remove-model-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+				#remove-model-dialog-actions button {
+					border: 1px solid #527c7c;
+					border-radius: 4px;
+					padding: 7px 10px;
+					background: #183437;
+					color: #effafa;
+					font: inherit;
+					cursor: pointer;
+				}
+				#confirm-remove-model { border-color: #99534d !important; background: #512f32 !important; }
+				#model-list-panel.collapsed { height: auto; }
 				#model-list-panel.collapsed #model-list { display: none; }
+				@media (max-width: 620px) {
+					#model-list-panel {
+						top: 56px;
+						left: 12px;
+						width: min(250px, calc(100vw - 24px));
+						height: min(240px, calc(100vh - 68px));
+					}
+				}
 				#open-ply {
 					border: 1px solid #527c7c;
 					border-radius: 4px;
@@ -145,11 +199,6 @@ export function buildPlyViewerHtml(
 					cursor: pointer;
 				}
 				#open-ply:hover { background: #24494b; }
-				#selected-file {
-					overflow: hidden;
-					text-overflow: ellipsis;
-					white-space: nowrap;
-				}
 				#viewer-status {
 					position: fixed;
 					z-index: 1;
@@ -214,7 +263,6 @@ export function buildPlyViewerHtml(
 			<div id="viewer-toolbar">
 				<button id="open-ply" type="button">Open PLY</button>
 				<input id="ply-file-picker" type="file" accept=".ply" multiple hidden />
-				<span id="selected-file"></span>
 			</div>
 			<div id="viewer-status" role="status">Loading PLY…</div>
 			<aside id="model-list-panel" aria-label="Loaded PLY models">
@@ -224,6 +272,14 @@ export function buildPlyViewerHtml(
 				</header>
 				<ul id="model-list"></ul>
 			</aside>
+			<dialog id="remove-model-dialog" aria-labelledby="remove-model-title">
+				<h2 id="remove-model-title">Remove model?</h2>
+				<p>Remove <strong id="remove-model-name"></strong> from the viewer?</p>
+				<div id="remove-model-dialog-actions">
+					<button id="cancel-remove-model" type="button">Cancel</button>
+					<button id="confirm-remove-model" type="button">Remove model</button>
+				</div>
+			</dialog>
 			<section id="model-info" aria-label="PLY model information">
 				<header id="model-info-header">
 					<span>Model</span>
