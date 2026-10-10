@@ -13,6 +13,15 @@
     #open-ply:hover { background: #24494b; }
     #selected-file { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #viewer-status { position: fixed; z-index: 1; top: 56px; left: 12px; color: #e2e8f0; font: 13px sans-serif; }
+    #model-info { position: fixed; z-index: 2; top: 12px; right: 12px; width: min(220px, calc(100vw - 24px)); box-sizing: border-box; border: 1px solid #48656a; border-radius: 5px; background: rgba(12, 22, 30, 0.94); color: #e2e8f0; font: 12px sans-serif; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28); }
+    #model-info-header { display: flex; align-items: center; justify-content: space-between; min-height: 34px; padding: 0 8px 0 10px; font-weight: 600; }
+    #toggle-model-info { width: 26px; height: 26px; border: 1px solid #527c7c; border-radius: 3px; background: #183437; color: #effafa; font: 18px/1 sans-serif; cursor: pointer; }
+    #toggle-model-info:hover { background: #24494b; }
+    #model-info-content { margin: 0; padding: 0 10px 9px; }
+    #model-info-content > div { display: flex; justify-content: space-between; gap: 12px; padding-top: 5px; }
+    #model-info-content dt { color: #a9c0c2; }
+    #model-info-content dd { margin: 0; font-variant-numeric: tabular-nums; }
+    #model-info.collapsed #model-info-content { display: none; }
   </style>
   <script type="importmap">
     {"imports":{"three":"./node_modules/three/build/three.module.js","three/addons/":"./node_modules/three/examples/jsm/"}}
@@ -26,6 +35,18 @@
     <span id="selected-file"></span>
   </div>
   <div id="viewer-status" role="status">PLY-Datei auswählen.</div>
+  <section id="model-info" aria-label="PLY-Modelldaten">
+    <header id="model-info-header">
+      <span>Modelldaten</span>
+      <button id="toggle-model-info" type="button" aria-label="Modelldaten minimieren" aria-expanded="true" title="Minimieren">−</button>
+    </header>
+    <dl id="model-info-content">
+      <div><dt>Punkte</dt><dd id="point-count">—</dd></div>
+      <div><dt>Ausdehnung X</dt><dd id="dimension-x">—</dd></div>
+      <div><dt>Ausdehnung Y</dt><dd id="dimension-y">—</dd></div>
+      <div><dt>Ausdehnung Z</dt><dd id="dimension-z">—</dd></div>
+    </dl>
+  </section>
   <script id="ply-url" type="application/json">""</script>
   <script type="module" src="./out/webview/index.js"></script>
 </body>

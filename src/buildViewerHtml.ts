@@ -98,6 +98,52 @@ export function buildPlyViewerHtml(
 					color: #e2e8f0;
 					font-size: 13px;
 				}
+				#model-info {
+					position: fixed;
+					z-index: 2;
+					top: 12px;
+					right: 12px;
+					width: min(220px, calc(100vw - 24px));
+					box-sizing: border-box;
+					border: 1px solid #48656a;
+					border-radius: 5px;
+					background: rgba(12, 22, 30, 0.94);
+					color: #e2e8f0;
+					font-size: 12px;
+					box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
+				}
+				#model-info-header {
+					display: flex;
+					align-items: center;
+					justify-content: space-between;
+					min-height: 34px;
+					padding: 0 8px 0 10px;
+					font-weight: 600;
+				}
+				#toggle-model-info {
+					width: 26px;
+					height: 26px;
+					border: 1px solid #527c7c;
+					border-radius: 3px;
+					background: #183437;
+					color: #effafa;
+					font: 18px/1 sans-serif;
+					cursor: pointer;
+				}
+				#toggle-model-info:hover { background: #24494b; }
+				#model-info-content {
+					margin: 0;
+					padding: 0 10px 9px;
+				}
+				#model-info-content > div {
+					display: flex;
+					justify-content: space-between;
+					gap: 12px;
+					padding-top: 5px;
+				}
+				#model-info-content dt { color: #a9c0c2; }
+				#model-info-content dd { margin: 0; font-variant-numeric: tabular-nums; }
+				#model-info.collapsed #model-info-content { display: none; }
 				canvas.dragging {
 					cursor: grabbing;
 				}
@@ -111,6 +157,18 @@ export function buildPlyViewerHtml(
 				<span id="selected-file"></span>
 			</div>
 			<div id="viewer-status" role="status">Loading PLY…</div>
+			<section id="model-info" aria-label="PLY model information">
+				<header id="model-info-header">
+					<span>Model</span>
+					<button id="toggle-model-info" type="button" aria-label="Minimize model information" aria-expanded="true" title="Minimize">−</button>
+				</header>
+				<dl id="model-info-content">
+					<div><dt>Points</dt><dd id="point-count">—</dd></div>
+					<div><dt>Size X</dt><dd id="dimension-x">—</dd></div>
+					<div><dt>Size Y</dt><dd id="dimension-y">—</dd></div>
+					<div><dt>Size Z</dt><dd id="dimension-z">—</dd></div>
+				</dl>
+			</section>
 			<script id="ply-url" type="application/json">${JSON.stringify(plyFileUrl)}</script>
 			<script nonce="${nonce}" type="importmap">
 				{

@@ -11,6 +11,24 @@ const filePicker = document.querySelector<HTMLInputElement>("#ply-file-picker");
 const openFileButton = document.querySelector<HTMLButtonElement>("#open-ply");
 const selectedFileNode =
   document.querySelector<HTMLSpanElement>("#selected-file");
+const modelInfoPanel = document.querySelector<HTMLElement>("#model-info");
+const modelInfoToggle =
+  document.querySelector<HTMLButtonElement>("#toggle-model-info");
+const pointCountNode = document.querySelector<HTMLElement>("#point-count");
+const dimensionXNode = document.querySelector<HTMLElement>("#dimension-x");
+const dimensionYNode = document.querySelector<HTMLElement>("#dimension-y");
+const dimensionZNode = document.querySelector<HTMLElement>("#dimension-z");
+
+modelInfoToggle?.addEventListener("click", () => {
+  const collapsed = modelInfoPanel?.classList.toggle("collapsed") ?? false;
+  modelInfoToggle.setAttribute("aria-expanded", String(!collapsed));
+  modelInfoToggle.setAttribute(
+    "aria-label",
+    collapsed ? "Expand model information" : "Minimize model information",
+  );
+  modelInfoToggle.title = collapsed ? "Expand" : "Minimize";
+  modelInfoToggle.textContent = collapsed ? "+" : "−";
+});
 
 function setStatus(message: string): void {
   if (statusNode) {
@@ -50,6 +68,7 @@ if (canvas && plyUrlNode) {
           return;
         }
 
+        updateModelInfo(model.geometry);
         cameraController.frameGeometry(
           model.geometry,
           window.innerWidth,
@@ -276,5 +295,30 @@ if (canvas && plyUrlNode) {
     const detail = error instanceof Error ? ` ${error.message}` : "";
     setStatus(`WebGL renderer could not start.${detail}`);
     console.error("[PLY Viewer] WebGL initialization failed:", error);
+  }
+}
+
+function updateModelInfo(geometry: THREE.BufferGeometry): void {
+  const position = geometry.getAttribute("position");
+  geometry.computeBoundingBox();
+  const size = geometry.boundingBox?.getSize(new THREE.Vector3());
+  if (!position || !size) {
+    return;
+  }
+
+  const formatNumber = new Intl.NumberFormat(undefined, {
+    maximumFractionDigits: 3,
+  });
+  if (pointCountNode) {
+    pointCountNode.textContent = new Intl.NumberFormat().format(position.count);
+  }
+  if (dimensionXNode) {
+    dimensionXNode.textContent = formatNumber.format(size.x);
+  }
+  if (dimensionYNode) {
+    dimensionYNode.textContent = formatNumber.format(size.y);
+  }
+  if (dimensionZNode) {
+    dimensionZNode.textContent = formatNumber.format(size.z);
   }
 }
