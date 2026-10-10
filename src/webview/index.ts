@@ -113,13 +113,25 @@ if (canvas && plyUrlNode) {
 
     viewerCanvas.focus();
     window.addEventListener("resize", viewer.resize);
+    viewerCanvas.addEventListener(
+      "wheel",
+      (event) => {
+        event.preventDefault();
+        cameraController.zoom(event.deltaY);
+        scheduleRender();
+      },
+      { passive: false },
+    );
 
     window.addEventListener("keydown", (event) => {
       if (event.altKey || event.ctrlKey || event.metaKey) {
         return;
       }
 
-      const key = event.code.startsWith("Numpad") ? event.code : event.key;
+      const key =
+        event.code.startsWith("Numpad") || event.code === "KeyZ"
+          ? event.code
+          : event.key;
       const { right, up } = cameraController.basis();
       switch (key) {
         case "4":
@@ -159,6 +171,11 @@ if (canvas && plyUrlNode) {
               fieldOfView,
             );
           }
+          break;
+        case "z":
+        case "Z":
+        case "KeyZ":
+          cameraController.centerTargetInView();
           break;
         default:
           return;

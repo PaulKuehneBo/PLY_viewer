@@ -44,6 +44,13 @@ export function createCameraController(
     syncCamera();
   }
 
+  function centerTargetInView(): void {
+    syncCamera();
+    camera.lookAt(cameraTarget);
+    cameraUp.copy(camera.up);
+    scheduleRender();
+  }
+
   function panView(
     deltaX: number,
     deltaY: number,
@@ -69,6 +76,29 @@ export function createCameraController(
       .addScaledVector(right, -deltaX * worldUnitsPerPixel)
       .addScaledVector(up, deltaY * worldUnitsPerPixel);
     cameraPosition.add(panOffset);
+    syncCamera();
+  }
+
+  function zoom(deltaY: number): void {
+    const offsetFromTarget = cameraPosition.clone().sub(cameraTarget);
+    const currentDistance = offsetFromTarget.length();
+    if (currentDistance === 0) {
+      return;
+    }
+
+    const wheelDelta = THREE.MathUtils.clamp(deltaY, -1000, 1000);
+    const zoomFactor = Math.exp(wheelDelta * 0.001);
+    const nextDistance = THREE.MathUtils.clamp(
+      currentDistance * zoomFactor,
+      0.01,
+      1e9,
+    );
+    cameraPosition
+      .copy(cameraTarget)
+      .add(offsetFromTarget.multiplyScalar(nextDistance / currentDistance));
+    camera.near = Math.min(camera.near, Math.max(0.001, nextDistance * 0.001));
+    camera.far = Math.max(camera.far, nextDistance * 2);
+    camera.updateProjectionMatrix();
     syncCamera();
   }
 
@@ -182,7 +212,9 @@ export function createCameraController(
     basis,
     rotate,
     setTarget,
+    centerTargetInView,
     panView,
+    zoom,
     fitGeometryAroundTarget,
     frameGeometry,
   };
