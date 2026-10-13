@@ -1,4 +1,3 @@
-import * as fs from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
 
@@ -25,124 +24,163 @@ function logViewerMessage(
   console.log(prefix, message.messageType, message.msg);
 }
 
-let activePlyPanel: vscode.WebviewPanel | undefined;
-let activePlyFileUri: vscode.Uri | undefined;
-let activePlyExtensionUri: vscode.Uri | undefined;
-let webviewReloadTimer: NodeJS.Timeout | undefined;
+const PLY_VIEW_TYPE = "posedCamera.plyViewer";
 
-function refreshActivePlyWebview(): void {
-  if (!activePlyPanel || !activePlyFileUri || !activePlyExtensionUri) {
-    return;
-  }
-
-  activePlyPanel.webview.html = buildPlyViewerHtml(
-    activePlyPanel.webview,
-    activePlyFileUri,
-    activePlyExtensionUri,
-  );
+interface PlyCustomDocument extends vscode.CustomDocument {
+  readonly uri: vscode.Uri;
 }
 
-function openPlyViewer(fileUri: vscode.Uri, extensionUri: vscode.Uri): void {
-  console.log("[EXT] openPlyViewer start:", fileUri.fsPath);
-  activePlyFileUri = fileUri;
-  activePlyExtensionUri = extensionUri;
+class PlyCustomEditorProvider implements vscode.CustomReadonlyEditorProvider<PlyCustomDocument> {
+  private sharedPanel: vscode.WebviewPanel | undefined;
+  private webviewReady = false;
+  private isLoadingQueue = false;
+  private readonly pendingFiles: vscode.Uri[] = [];
 
-  if (activePlyPanel) {
-    activePlyPanel.dispose();
-    activePlyPanel = undefined;
+  constructor(private readonly extensionUri: vscode.Uri) {}
+
+  openCustomDocument(
+    uri: vscode.Uri,
+    _openContext: vscode.CustomDocumentOpenContext,
+    _token: vscode.CancellationToken,
+  ): PlyCustomDocument {
+    return { uri, dispose: () => undefined };
   }
 
-  const panel = vscode.window.createWebviewPanel(
-    "posedCameraPlyViewer",
-    "Posed Camera PLY Viewer",
-    vscode.ViewColumn.One,
-    {
+  resolveCustomEditor(
+    document: PlyCustomDocument,
+    panel: vscode.WebviewPanel,
+    _token: vscode.CancellationToken,
+  ): void {
+    if (this.sharedPanel && this.sharedPanel !== panel) {
+      this.sharedPanel.reveal(panel.viewColumn);
+      this.pendingFiles.push(document.uri);
+      void this.flushPendingFiles();
+      panel.dispose();
+      return;
+    }
+
+    this.sharedPanel = panel;
+    this.webviewReady = false;
+    panel.onDidDispose(() => {
+      if (this.sharedPanel === panel) {
+        this.sharedPanel = undefined;
+        this.webviewReady = false;
+        this.pendingFiles.length = 0;
+      }
+    });
+
+    panel.webview.options = {
       enableScripts: true,
-      retainContextWhenHidden: true,
       localResourceRoots: [
-        extensionUri,
-        vscode.Uri.joinPath(extensionUri, "node_modules"),
-        vscode.Uri.joinPath(extensionUri, "out"),
-        fileUri.with({ path: path.dirname(fileUri.path) }),
+        this.extensionUri,
+        vscode.Uri.joinPath(this.extensionUri, "node_modules"),
+        vscode.Uri.joinPath(this.extensionUri, "out"),
+        document.uri.with({ path: path.dirname(document.uri.path) }),
       ],
-    },
-  );
+    };
+    panel.webview.html = buildPlyViewerHtml(
+      panel.webview,
+      document.uri,
+      this.extensionUri,
+    );
+    panel.webview.onDidReceiveMessage(async (message: unknown) => {
+      if (
+        typeof message === "object" &&
+        message !== null &&
+        "command" in message &&
+        message.command === "webviewReady"
+      ) {
+        this.webviewReady = true;
+        await this.flushPendingFiles();
+        return;
+      }
 
-  activePlyPanel = panel;
-  panel.onDidDispose(() => {
-    if (activePlyPanel === panel) {
-      activePlyPanel = undefined;
-    }
-  });
+      if (
+        typeof message === "object" &&
+        message !== null &&
+        "command" in message &&
+        message.command === "openPlyFiles"
+      ) {
+        await this.openPlyFilesInPanel(panel);
+        return;
+      }
 
-  panel.webview.html = buildPlyViewerHtml(panel.webview, fileUri, extensionUri);
-  panel.webview.onDidReceiveMessage(async (message: unknown) => {
-    if (
-      typeof message === "object" &&
-      message !== null &&
-      "command" in message &&
-      message.command === "openPlyFiles"
-    ) {
-      await openPlyFilesInPanel(panel);
-      return;
-    }
+      const viewerMessage = message as ViewerMessage | undefined;
+      if (
+        !viewerMessage ||
+        typeof viewerMessage.messageType !== "string" ||
+        typeof viewerMessage.msg !== "string"
+      ) {
+        return;
+      }
 
-    const viewerMessage = message as ViewerMessage | undefined;
-    if (
-      !viewerMessage ||
-      typeof viewerMessage.messageType !== "string" ||
-      typeof viewerMessage.msg !== "string"
-    ) {
-      return;
-    }
-
-    switch (viewerMessage.messageType) {
-      case "verbose":
-        logViewerMessage("verbose", viewerMessage);
-        break;
-      case "warning":
-        logViewerMessage("warning", viewerMessage);
-        break;
-      case "error":
-        logViewerMessage("error", viewerMessage);
-        break;
-      default:
-        logViewerMessage("verbose", {
-          messageType: viewerMessage.messageType,
-          msg: viewerMessage.msg,
-        });
-        break;
-    }
-  });
-}
-
-async function openPlyFilesInPanel(panel: vscode.WebviewPanel): Promise<void> {
-  const fileUris = await vscode.window.showOpenDialog({
-    canSelectFiles: true,
-    canSelectFolders: false,
-    canSelectMany: true,
-    filters: { "PLY Files": ["ply"] },
-    openLabel: "Add PLY models",
-  });
-  if (!fileUris?.length) {
-    return;
+      switch (viewerMessage.messageType) {
+        case "verbose":
+          logViewerMessage("verbose", viewerMessage);
+          break;
+        case "warning":
+          logViewerMessage("warning", viewerMessage);
+          break;
+        case "error":
+          logViewerMessage("error", viewerMessage);
+          break;
+        default:
+          logViewerMessage("verbose", {
+            messageType: viewerMessage.messageType,
+            msg: viewerMessage.msg,
+          });
+          break;
+      }
+    });
   }
 
-  for (const fileUri of fileUris) {
+  private async openPlyFilesInPanel(panel: vscode.WebviewPanel): Promise<void> {
+    const fileUris = await vscode.window.showOpenDialog({
+      canSelectFiles: true,
+      canSelectFolders: false,
+      canSelectMany: true,
+      filters: { "PLY Files": ["ply"] },
+      openLabel: "Add PLY models",
+    });
+    if (!fileUris?.length || this.sharedPanel !== panel) {
+      return;
+    }
+
+    this.pendingFiles.push(...fileUris);
+    await this.flushPendingFiles();
+  }
+
+  private async flushPendingFiles(): Promise<void> {
+    const panel = this.sharedPanel;
+    if (!panel || !this.webviewReady || this.isLoadingQueue) {
+      return;
+    }
+
+    this.isLoadingQueue = true;
     try {
-      const fileContents = await vscode.workspace.fs.readFile(fileUri);
-      const data = Uint8Array.from(fileContents).buffer;
-      await panel.webview.postMessage({
-        command: "loadPlyFile",
-        fileName: path.basename(fileUri.path),
-        data,
-      });
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      await panel.webview.postMessage({
-        command: "openPlyError",
-        error: `${path.basename(fileUri.path)}: ${detail}`,
-      });
+      while (this.pendingFiles.length > 0 && this.sharedPanel === panel) {
+        const fileUri = this.pendingFiles.shift();
+        if (!fileUri) {
+          continue;
+        }
+        try {
+          const fileContents = await vscode.workspace.fs.readFile(fileUri);
+          const data = Uint8Array.from(fileContents).buffer;
+          await panel.webview.postMessage({
+            command: "loadPlyFile",
+            fileName: path.basename(fileUri.path),
+            data,
+          });
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : String(error);
+          await panel.webview.postMessage({
+            command: "openPlyError",
+            error: `${path.basename(fileUri.path)}: ${detail}`,
+          });
+        }
+      }
+    } finally {
+      this.isLoadingQueue = false;
     }
   }
 }
@@ -151,27 +189,16 @@ export function activate(context: vscode.ExtensionContext): void {
   console.log("[EXT] activate() start");
   console.log("[EXT] extensionUri:", context.extensionUri.fsPath);
 
-  const webviewWatchPath = path.join(
-    context.extensionUri.fsPath,
-    "out",
-    "webview",
+  context.subscriptions.push(
+    vscode.window.registerCustomEditorProvider(
+      PLY_VIEW_TYPE,
+      new PlyCustomEditorProvider(context.extensionUri),
+      {
+        webviewOptions: { retainContextWhenHidden: true },
+        supportsMultipleEditorsPerDocument: false,
+      },
+    ),
   );
-  try {
-    if (fs.existsSync(webviewWatchPath)) {
-      const watcher = fs.watch(webviewWatchPath, { persistent: false }, () => {
-        if (webviewReloadTimer) {
-          clearTimeout(webviewReloadTimer);
-        }
-
-        webviewReloadTimer = setTimeout(() => {
-          refreshActivePlyWebview();
-        }, 250);
-      });
-      context.subscriptions.push({ dispose: () => watcher.close() });
-    }
-  } catch (err) {
-    console.error("[EXT] Error setting up webview watcher:", err);
-  }
 
   const command = vscode.commands.registerCommand(
     "posed-camera.openWebview",
@@ -188,7 +215,11 @@ export function activate(context: vscode.ExtensionContext): void {
       }
 
       try {
-        openPlyViewer(fileUri[0], context.extensionUri);
+        await vscode.commands.executeCommand(
+          "vscode.openWith",
+          fileUri[0],
+          PLY_VIEW_TYPE,
+        );
       } catch (err) {
         console.error("[EXT] Error opening PLY viewer:", err);
       }
@@ -196,24 +227,6 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   context.subscriptions.push(command);
-
-  const fileOpenListener = vscode.workspace.onDidOpenTextDocument(
-    (document) => {
-      const fileName = document.fileName.toLowerCase();
-      if (!fileName.endsWith(".ply") || document.uri.scheme !== "file") {
-        return;
-      }
-
-      console.log("[EXT] PLY file found:", document.fileName);
-      try {
-        openPlyViewer(document.uri, context.extensionUri);
-      } catch (err) {
-        console.error("[EXT] Error opening PLY viewer:", err);
-      }
-    },
-  );
-
-  context.subscriptions.push(fileOpenListener);
 }
 
 export function deactivate(): void {

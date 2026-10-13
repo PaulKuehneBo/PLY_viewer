@@ -12,13 +12,26 @@
   ],
   "main": "./out/extension.js",
   "activationEvents": [
-    "onLanguage:ply"
+    "onCustomEditor:posedCamera.plyViewer",
+    "onCommand:posed-camera.openWebview"
   ],
   "contributes": {
     "commands": [
       {
         "command": "posed-camera.openWebview",
         "title": "Open Posed Camera PLY Viewer"
+      }
+    ],
+    "customEditors": [
+      {
+        "viewType": "posedCamera.plyViewer",
+        "displayName": "Posed Camera PLY Viewer",
+        "selector": [
+          {
+            "filenamePattern": "*.ply"
+          }
+        ],
+        "priority": "default"
       }
     ],
     "languages": [

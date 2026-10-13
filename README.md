@@ -4,7 +4,7 @@ VS-Code-Erweiterung zum Anzeigen von PLY-Punktwolken und Meshes in einem Webview
 
 ## Implementierter Stand
 
-- Beim Öffnen einer `.ply`-Datei wird die Erweiterung über die Sprache `ply` aktiviert und öffnet den Viewer automatisch.
+- `.ply`-Dateien werden im Explorer standardmäßig im readonly Posed-Camera-Viewer geöffnet, auch wenn sie binär sind. Zum Bearbeiten kann über **Open With…** ausdrücklich **Text Editor** gewählt werden.
 - Der Befehl **Open Posed Camera PLY Viewer** öffnet alternativ einen Dateiauswahldialog.
 - Der Button **Open PLY** im Extension-Webview öffnet den VS-Code-Dateidialog. Die gewählten Dateien werden über `workspace.fs` gelesen und funktionieren dadurch auch bei Remote-SSH, WSL und Dev Containers. Mehrfachauswahl fügt mehrere Modelle hinzu.
 - Three.js rendert mit `WebGLRenderer`, PerspectiveCamera, GPU-Tiefenpuffer und auf zwei begrenzter Display-Pixel-Dichte.
@@ -16,7 +16,7 @@ VS-Code-Erweiterung zum Anzeigen von PLY-Punktwolken und Meshes in einem Webview
 
 ## Aufbau
 
-- `src/extension.ts` aktiviert die Erweiterung, registriert den Dateiauswahlbefehl und öffnet den Webview.
+- `src/extension.ts` registriert den readonly Custom Editor für `.ply`-Dateien sowie den Dateiauswahlbefehl und öffnet den Webview.
 - Der Extension Host übergibt die initiale PLY-URI; der Webview lädt sie direkt mit `PLYLoader`. Weitere Dateien aus dem Extension-Webview werden vom Extension Host mit `workspace.fs` gelesen und als ArrayBuffer an den Webview übertragen.
 - `src/plyParser.ts` ist der frühere zeilenbasierte ASCII-Parser und wird vom aktuellen Viewer nicht mehr verwendet.
 - `src/buildViewerHtml.ts` erstellt das Webview-HTML, setzt die Content Security Policy und Import Map für Three.js sowie die PLY-Datei-URL.
@@ -30,7 +30,7 @@ Der aktive `PLYLoader` unterstützt ASCII- und binäre PLY-Geometrie sowie gäng
 
 PLY definiert kein breit unterstütztes Materialsystem wie glTF. Three.js-`PLYLoader` übernimmt Geometrie, Farben, Normalen und UVs, aber keine portablen PBR-Materialien, Texturdateien oder allgemeinen `material_index`-Zuordnungen. Der Viewer verwendet deshalb ein `MeshStandardMaterial` mit Vertexfarben, wenn Farbattribute existieren, sonst ein türkisfarbenes Standardmaterial. Texturen oder materialspezifische Parameter aus proprietären PLY-Properties sind nicht automatisch umgesetzt.
 
-Pro Erweiterungsinstanz wird nur ein Viewer-Panel verwaltet; beim Öffnen einer weiteren PLY-Datei wird das vorherige Panel ersetzt. Die PLY-Daten werden im Webview auf dem Hauptthread geparst. Sehr große Dateien können deshalb noch eine Ladepause verursachen; ein Web Worker wäre eine mögliche spätere Optimierung.
+Pro Erweiterungsinstanz wird ein gemeinsamer Viewer verwendet. Die erste im Explorer geöffnete PLY-Datei erzeugt das Viewer-Fenster; weitere geöffnete PLY-Dateien werden als zusätzliche Modelle in dieses Fenster geladen. Das gilt auch für den Befehl **Open Posed Camera PLY Viewer** und die Schaltfläche **Open PLY**. Die PLY-Daten werden im Webview auf dem Hauptthread geparst. Sehr große Dateien können deshalb noch eine Ladepause verursachen; ein Web Worker wäre eine mögliche spätere Optimierung.
 
 ## Paket und Befehle
 
@@ -49,7 +49,7 @@ Die zentralen Angaben in `package.json`:
 1. Abhängigkeiten installieren: `npm install`.
 2. Bauen: `npm run compile`.
 3. In VS Code **Run Extension** mit F5 starten. Die Launch-Konfiguration kompiliert vorab über `npm: compile`.
-4. Im Extension Development Host eine `.ply`-Datei öffnen. Alternativ den Befehl **Open Posed Camera PLY Viewer** aus der Befehlspalette aufrufen.
+4. Im Extension Development Host eine `.ply`-Datei im Explorer öffnen. Sie wird standardmäßig im Viewer angezeigt. Für Textbearbeitung **Open With… → Text Editor** wählen. Alternativ den Befehl **Open Posed Camera PLY Viewer** aus der Befehlspalette aufrufen.
 
 Die Debug-Konfiguration in `.vscode/launch.json` verwendet `--new-window`, `--disable-extensions` sowie separate `--user-data-dir`- und `--extensions-dir`-Pfade unter `.vscode-test/`. Der Entwicklungspfad dieser Erweiterung wird weiterhin über `--extensionDevelopmentPath` geladen.
 

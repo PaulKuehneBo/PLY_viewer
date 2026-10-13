@@ -457,7 +457,9 @@ if (canvas && plyUrlNode) {
       }
       plyFilePicker.value = "";
     });
-    void loadEmbeddedPly();
+    void loadEmbeddedPly().finally(() => {
+      vscodeApi?.postMessage({ command: "webviewReady" });
+    });
 
     function pointerAngleAroundViewportCenter(
       event: PointerEvent,
