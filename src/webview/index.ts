@@ -31,6 +31,13 @@ const pointCountNode = document.querySelector<HTMLElement>("#point-count");
 const dimensionXNode = document.querySelector<HTMLElement>("#dimension-x");
 const dimensionYNode = document.querySelector<HTMLElement>("#dimension-y");
 const dimensionZNode = document.querySelector<HTMLElement>("#dimension-z");
+const vscodeApi = (
+  window as Window & {
+    acquireVsCodeApi?: () => {
+      postMessage: (message: { command: string }) => void;
+    };
+  }
+).acquireVsCodeApi?.();
 
 modelInfoToggle?.addEventListener("click", () => {
   const collapsed = modelInfoPanel?.classList.toggle("collapsed") ?? false;
@@ -121,6 +128,30 @@ if (canvas && plyUrlNode) {
         console.error("[PLY Viewer] PLYLoader failed:", error);
       }
     }
+
+    window.addEventListener("message", (event: MessageEvent<unknown>) => {
+      if (typeof event.data !== "object" || event.data === null) {
+        return;
+      }
+      const message = event.data as {
+        command?: unknown;
+        fileName?: unknown;
+        data?: unknown;
+        error?: unknown;
+      };
+      if (
+        message.command === "loadPlyFile" &&
+        typeof message.fileName === "string" &&
+        message.data instanceof ArrayBuffer
+      ) {
+        void loadPly(message.data, message.fileName);
+      } else if (
+        message.command === "openPlyError" &&
+        typeof message.error === "string"
+      ) {
+        setStatus(`Could not open PLY file. ${message.error}`);
+      }
+    });
 
     function addModelEntry(name: string, model: PLYModel): HTMLLIElement {
       const item = document.createElement("li");
@@ -412,7 +443,13 @@ if (canvas && plyUrlNode) {
 
     viewerCanvas.addEventListener("pointerup", endPointer);
     viewerCanvas.addEventListener("pointercancel", endPointer);
-    plyOpenFileButton?.addEventListener("click", () => plyFilePicker?.click());
+    plyOpenFileButton?.addEventListener("click", () => {
+      if (vscodeApi) {
+        vscodeApi.postMessage({ command: "openPlyFiles" });
+      } else {
+        plyFilePicker?.click();
+      }
+    });
     plyFilePicker?.addEventListener("change", async () => {
       const files = Array.from(plyFilePicker.files ?? []);
       for (const file of files) {

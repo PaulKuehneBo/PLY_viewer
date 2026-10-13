@@ -6,6 +6,7 @@ VS-Code-Erweiterung zum Anzeigen von PLY-Punktwolken und Meshes in einem Webview
 
 - Beim Öffnen einer `.ply`-Datei wird die Erweiterung über die Sprache `ply` aktiviert und öffnet den Viewer automatisch.
 - Der Befehl **Open Posed Camera PLY Viewer** öffnet alternativ einen Dateiauswahldialog.
+- Der Button **Open PLY** im Extension-Webview öffnet den VS-Code-Dateidialog. Die gewählten Dateien werden über `workspace.fs` gelesen und funktionieren dadurch auch bei Remote-SSH, WSL und Dev Containers. Mehrfachauswahl fügt mehrere Modelle hinzu.
 - Three.js rendert mit `WebGLRenderer`, PerspectiveCamera, GPU-Tiefenpuffer und auf zwei begrenzter Display-Pixel-Dichte.
 - `PLYLoader` lädt die Originaldatei im Webview; der Extension Host serialisiert nicht mehr alle Vertices und Faces als JSON.
 - Punktwolken werden als `Points`, Meshes als `MeshStandardMaterial` gerendert. Vertex- und Face-RGB-Farben werden als Three.js-Farbattribute übernommen; vorhandene Normalen werden genutzt, andernfalls für Meshes berechnet.
@@ -16,7 +17,7 @@ VS-Code-Erweiterung zum Anzeigen von PLY-Punktwolken und Meshes in einem Webview
 ## Aufbau
 
 - `src/extension.ts` aktiviert die Erweiterung, registriert den Dateiauswahlbefehl und öffnet den Webview.
-- Der Extension Host übergibt die PLY-URI; der Webview lädt die Datei direkt mit `PLYLoader`.
+- Der Extension Host übergibt die initiale PLY-URI; der Webview lädt sie direkt mit `PLYLoader`. Weitere Dateien aus dem Extension-Webview werden vom Extension Host mit `workspace.fs` gelesen und als ArrayBuffer an den Webview übertragen.
 - `src/plyParser.ts` ist der frühere zeilenbasierte ASCII-Parser und wird vom aktuellen Viewer nicht mehr verwendet.
 - `src/buildViewerHtml.ts` erstellt das Webview-HTML, setzt die Content Security Policy und Import Map für Three.js sowie die PLY-Datei-URL.
 - `src/webview/index.ts` enthält `PLYLoader`, WebGL-Szene, PerspectiveCamera sowie die eigene Tastatur- und Pointer-Steuerung.
@@ -59,7 +60,7 @@ Der Harness `webgl-harness.html` kann unabhängig vom Extension Host im Browser 
 1. Im Extension-Projekt `npm run compile` ausführen.
 2. Im Projektordner einen lokalen Server starten: `python -m http.server 4179 --bind 127.0.0.1`.
 3. In Edge `http://127.0.0.1:4179/webgl-harness.html` öffnen.
-4. **PLY-Datei öffnen** wählen und eine lokale `.ply`-Datei auswählen. Die Datei wird nur lokal im Browser gelesen und nicht hochgeladen.
+4. **PLY-Datei öffnen** wählen und eine lokale `.ply`-Datei auswählen. Im Standalone-Harness verwendet dieser Button den Browser-Dateidialog; für Remote-Dateien den Button im Extension-Webview verwenden.
 
 Der Harness startet ohne fest ausgewählte Datei. Die Extension-Webview kann weiterhin eine beim Öffnen übergebene PLY-Datei direkt laden; beide Varianten teilen sich denselben WebGL-Renderer und dieselben Kamera-Controls.
 

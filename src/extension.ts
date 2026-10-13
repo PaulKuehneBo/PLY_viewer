@@ -63,7 +63,7 @@ function openPlyViewer(fileUri: vscode.Uri, extensionUri: vscode.Uri): void {
         extensionUri,
         vscode.Uri.joinPath(extensionUri, "node_modules"),
         vscode.Uri.joinPath(extensionUri, "out"),
-        vscode.Uri.file(path.dirname(fileUri.fsPath)),
+        fileUri.with({ path: path.dirname(fileUri.path) }),
       ],
     },
   );
@@ -76,7 +76,17 @@ function openPlyViewer(fileUri: vscode.Uri, extensionUri: vscode.Uri): void {
   });
 
   panel.webview.html = buildPlyViewerHtml(panel.webview, fileUri, extensionUri);
-  panel.webview.onDidReceiveMessage((message: unknown) => {
+  panel.webview.onDidReceiveMessage(async (message: unknown) => {
+    if (
+      typeof message === "object" &&
+      message !== null &&
+      "command" in message &&
+      message.command === "openPlyFiles"
+    ) {
+      await openPlyFilesInPanel(panel);
+      return;
+    }
+
     const viewerMessage = message as ViewerMessage | undefined;
     if (
       !viewerMessage ||
@@ -104,6 +114,37 @@ function openPlyViewer(fileUri: vscode.Uri, extensionUri: vscode.Uri): void {
         break;
     }
   });
+}
+
+async function openPlyFilesInPanel(panel: vscode.WebviewPanel): Promise<void> {
+  const fileUris = await vscode.window.showOpenDialog({
+    canSelectFiles: true,
+    canSelectFolders: false,
+    canSelectMany: true,
+    filters: { "PLY Files": ["ply"] },
+    openLabel: "Add PLY models",
+  });
+  if (!fileUris?.length) {
+    return;
+  }
+
+  for (const fileUri of fileUris) {
+    try {
+      const fileContents = await vscode.workspace.fs.readFile(fileUri);
+      const data = Uint8Array.from(fileContents).buffer;
+      await panel.webview.postMessage({
+        command: "loadPlyFile",
+        fileName: path.basename(fileUri.path),
+        data,
+      });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      await panel.webview.postMessage({
+        command: "openPlyError",
+        error: `${path.basename(fileUri.path)}: ${detail}`,
+      });
+    }
+  }
 }
 
 export function activate(context: vscode.ExtensionContext): void {
