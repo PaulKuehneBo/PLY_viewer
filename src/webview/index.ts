@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { createCameraController } from "./cameraController.js";
-import { createPlyModel, disposePlyModel } from "./plyModel.js";
+import { createPlyModel, disposePlyModel, type PLYModel } from "./plyModel.js";
 import { resolvePointerTarget } from "./pointTargeting.js";
 import { createViewerScene } from "./viewerScene.js";
 
@@ -80,7 +80,7 @@ if (canvas && plyUrlNode) {
     let previousPointerY = 0;
     const models: Array<{
       name: string;
-      model: THREE.Mesh | THREE.Points;
+      model: PLYModel;
       element: HTMLLIElement;
     }> = [];
     let pendingRemoval: (typeof models)[number] | undefined;
@@ -121,10 +121,7 @@ if (canvas && plyUrlNode) {
       }
     }
 
-    function addModelEntry(
-      name: string,
-      model: THREE.Mesh | THREE.Points,
-    ): HTMLLIElement {
+    function addModelEntry(name: string, model: PLYModel): HTMLLIElement {
       const item = document.createElement("li");
       item.className = "model-entry";
       const label = document.createElement("label");
@@ -193,7 +190,7 @@ if (canvas && plyUrlNode) {
       pendingRemoval = undefined;
     });
 
-    function getVisibleModels(): (THREE.Mesh | THREE.Points)[] {
+    function getVisibleModels(): PLYModel[] {
       return models
         .filter(({ model }) => model.visible)
         .map(({ model }) => model);

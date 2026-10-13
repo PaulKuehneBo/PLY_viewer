@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import type { PLYModel } from "./plyModel.js";
 
 const CONE_HALF_ANGLE = THREE.MathUtils.degToRad(1.5);
 const MAX_RAY_LENGTH = 50;
@@ -6,7 +7,7 @@ const MAX_RAY_LENGTH = 50;
 export function resolvePointerTarget(
   canvas: HTMLCanvasElement,
   camera: THREE.PerspectiveCamera,
-  models: readonly (THREE.Mesh | THREE.Points)[],
+  models: readonly PLYModel[],
   clientX: number,
   clientY: number,
 ): THREE.Vector3 | undefined {
@@ -31,10 +32,13 @@ export function resolvePointerTarget(
     if (!model.visible) {
       continue;
     }
-    model.updateWorldMatrix(true, false);
+    model.updateWorldMatrix(true, true);
 
-    if (model instanceof THREE.Points) {
-      const position = model.geometry.getAttribute("position");
+    const points = model.children.find(
+      (child): child is THREE.Points => child instanceof THREE.Points,
+    );
+    if (points) {
+      const position = points.geometry.getAttribute("position");
       if (!position) {
         continue;
       }
@@ -44,7 +48,7 @@ export function resolvePointerTarget(
           position.getX(index),
           position.getY(index),
           position.getZ(index),
-        ).applyMatrix4(model.matrixWorld);
+        ).applyMatrix4(points.matrixWorld);
         const offset = point.clone().sub(raycaster.ray.origin);
         const rayLength = offset.dot(direction);
         if (rayLength <= 0 || rayLength > MAX_RAY_LENGTH) {

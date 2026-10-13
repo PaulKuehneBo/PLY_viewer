@@ -3,7 +3,7 @@ dist
 node_modules
 .vscode-test/
 *.vsix
-
+data/
 # Python / uv
 .venv/
 __pycache__/

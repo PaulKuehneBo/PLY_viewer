@@ -1,17 +1,30 @@
 import * as THREE from "three";
 import { PLYLoader } from "three/addons/loaders/PLYLoader.js";
+import { parsePlyTopology } from "./plyTopology.js";
 
-export type PLYModel = THREE.Mesh | THREE.Points;
+export class PLYModel extends THREE.Group {
+  constructor(readonly geometry: THREE.BufferGeometry) {
+    super();
+  }
+}
 
 export function createPlyModel(data: ArrayBuffer): PLYModel | undefined {
-  const hasFaces = readFaceCount(data) > 0;
+  const topology = parsePlyTopology(data);
+  const hasFaces = topology.faceCount > 0;
   const geometry = new PLYLoader().parse(data);
+  convertFloat64AttributesForWebGL(geometry);
   const position = geometry.getAttribute("position");
   if (!position || position.count === 0) {
     geometry.dispose();
     return undefined;
   }
 
+  if (position.count !== topology.vertexCount) {
+    geometry.dispose();
+    throw new Error("PLY vertex count does not match the parsed header.");
+  }
+
+  const model = new PLYModel(geometry);
   if (!geometry.getAttribute("normal") && hasFaces) {
     geometry.computeVertexNormals();
   }
@@ -25,47 +38,90 @@ export function createPlyModel(data: ArrayBuffer): PLYModel | undefined {
       metalness: 0,
       side: THREE.DoubleSide,
     });
-    return new THREE.Mesh(geometry, material);
+    model.add(new THREE.Mesh(geometry, material));
+  } else {
+    const material = new THREE.PointsMaterial({
+      color: hasVertexColors ? 0xffffff : 0xa7d8cc,
+      size: 2,
+      sizeAttenuation: false,
+      vertexColors: hasVertexColors,
+    });
+    model.add(new THREE.Points(geometry, material));
   }
 
-  const material = new THREE.PointsMaterial({
-    color: hasVertexColors ? 0xffffff : 0xa7d8cc,
-    size: 2,
-    sizeAttenuation: false,
-    vertexColors: hasVertexColors,
-  });
-  return new THREE.Points(geometry, material);
+  if (topology.edges.length > 0) {
+    const linePositions: number[] = [];
+    const lineColors: number[] = [];
+    const edgeColor = new THREE.Color();
+    for (const edge of topology.edges) {
+      edgeColor.setRGB(...edge.color, THREE.SRGBColorSpace);
+      for (const vertexIndex of [edge.firstVertex, edge.secondVertex]) {
+        linePositions.push(
+          position.getX(vertexIndex),
+          position.getY(vertexIndex),
+          position.getZ(vertexIndex),
+        );
+        lineColors.push(edgeColor.r, edgeColor.g, edgeColor.b);
+      }
+    }
+
+    const lineGeometry = new THREE.BufferGeometry();
+    lineGeometry.setAttribute(
+      "position",
+      new THREE.Float32BufferAttribute(linePositions, 3),
+    );
+    lineGeometry.setAttribute(
+      "color",
+      new THREE.Float32BufferAttribute(lineColors, 3),
+    );
+    lineGeometry.computeBoundingSphere();
+    const lineMaterial = new THREE.LineBasicMaterial({
+      vertexColors: true,
+      depthWrite: false,
+    });
+    const lines = new THREE.LineSegments(lineGeometry, lineMaterial);
+    lines.name = "edges";
+    lines.renderOrder = 1;
+    model.add(lines);
+  }
+
+  return model;
+}
+
+function convertFloat64AttributesForWebGL(
+  geometry: THREE.BufferGeometry,
+): void {
+  for (const [name, attribute] of Object.entries(geometry.attributes)) {
+    if (!(attribute.array instanceof Float64Array)) {
+      continue;
+    }
+
+    const converted = new THREE.Float32BufferAttribute(
+      attribute.array,
+      attribute.itemSize,
+      attribute.normalized,
+    );
+    converted.name = attribute.name;
+    geometry.setAttribute(name, converted);
+  }
 }
 
 export function disposePlyModel(model: PLYModel): void {
-  model.geometry.dispose();
-  if (Array.isArray(model.material)) {
-    model.material.forEach((material) => material.dispose());
-  } else {
-    model.material.dispose();
-  }
-}
-
-function readFaceCount(data: ArrayBuffer): number {
-  const bytes = new Uint8Array(data);
-  const decoder = new TextDecoder("ascii");
-  const headerLines: string[] = [];
-  let lineStart = 0;
-
-  for (let index = 0; index < bytes.length; index += 1) {
-    if (bytes[index] !== 10) {
-      continue;
+  const geometries = new Set<THREE.BufferGeometry>([model.geometry]);
+  const materials = new Set<THREE.Material>();
+  model.traverse((object) => {
+    if (
+      object instanceof THREE.Mesh ||
+      object instanceof THREE.Points ||
+      object instanceof THREE.LineSegments
+    ) {
+      geometries.add(object.geometry);
+      const objectMaterials = Array.isArray(object.material)
+        ? object.material
+        : [object.material];
+      objectMaterials.forEach((material) => materials.add(material));
     }
-    const line = decoder.decode(bytes.subarray(lineStart, index)).trim();
-    headerLines.push(line);
-    lineStart = index + 1;
-    if (line === "end_header") {
-      break;
-    }
-  }
-
-  const faceElement = headerLines.find((line) =>
-    /^element\s+face\s+\d+$/.test(line),
-  );
-  return faceElement ? Number.parseInt(faceElement.split(/\s+/)[2], 10) : 0;
+  });
+  geometries.forEach((geometry) => geometry.dispose());
+  materials.forEach((material) => material.dispose());
 }
