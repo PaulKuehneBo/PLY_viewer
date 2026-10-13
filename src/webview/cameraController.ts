@@ -19,10 +19,15 @@ export function createCameraController(
     targetAxes.position.copy(cameraTarget);
   }
 
-  function basis(): { right: THREE.Vector3; up: THREE.Vector3 } {
+  function basis(): {
+    right: THREE.Vector3;
+    up: THREE.Vector3;
+    z: THREE.Vector3;
+  } {
     const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
     const up = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
-    return { right, up };
+    const z = new THREE.Vector3().crossVectors(right, up).normalize();
+    return { right, up, z };
   }
 
   function rotate(axis: THREE.Vector3, angle: number): void {

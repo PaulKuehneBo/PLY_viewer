@@ -75,9 +75,10 @@ if (canvas && plyUrlNode) {
     );
     const rotationStep = Math.PI / 36;
     let activePointer: number | undefined;
-    let activePointerMode: "orbit" | "pan" = "orbit";
+    let activePointerMode: "orbit" | "pan" | "roll-z" = "orbit";
     let previousPointerX = 0;
     let previousPointerY = 0;
+    let previousRollAngle: number | undefined;
     const models: Array<{
       name: string;
       model: PLYModel;
@@ -335,9 +336,14 @@ if (canvas && plyUrlNode) {
       }
 
       activePointer = event.pointerId;
-      activePointerMode = event.button === 1 ? "pan" : "orbit";
+      activePointerMode =
+        event.button === 1 ? "pan" : event.shiftKey ? "roll-z" : "orbit";
       previousPointerX = event.clientX;
       previousPointerY = event.clientY;
+      previousRollAngle =
+        activePointerMode === "roll-z"
+          ? pointerAngleAroundViewportCenter(event)
+          : undefined;
       viewerCanvas.setPointerCapture(event.pointerId);
       viewerCanvas.classList.add("dragging");
       viewerCanvas.focus();
@@ -360,6 +366,26 @@ if (canvas && plyUrlNode) {
         return;
       }
 
+      if (activePointerMode === "roll-z") {
+        const currentRollAngle = pointerAngleAroundViewportCenter(event);
+        if (currentRollAngle === undefined) {
+          previousRollAngle = undefined;
+          return;
+        }
+        if (previousRollAngle !== undefined) {
+          const rawAngleDelta = currentRollAngle - previousRollAngle;
+          const angleDelta = Math.atan2(
+            Math.sin(rawAngleDelta),
+            Math.cos(rawAngleDelta),
+          );
+          const { z } = cameraController.basis();
+          cameraController.rotate(z, -angleDelta);
+          scheduleRender();
+        }
+        previousRollAngle = currentRollAngle;
+        return;
+      }
+
       const sensitivity = 0.005;
       const { right, up } = cameraController.basis();
 
@@ -377,6 +403,7 @@ if (canvas && plyUrlNode) {
         return;
       }
       activePointer = undefined;
+      previousRollAngle = undefined;
       viewerCanvas.classList.remove("dragging");
       if (viewerCanvas.hasPointerCapture(event.pointerId)) {
         viewerCanvas.releasePointerCapture(event.pointerId);
@@ -394,6 +421,18 @@ if (canvas && plyUrlNode) {
       plyFilePicker.value = "";
     });
     void loadEmbeddedPly();
+
+    function pointerAngleAroundViewportCenter(
+      event: PointerEvent,
+    ): number | undefined {
+      const bounds = viewerCanvas.getBoundingClientRect();
+      const offsetX = event.clientX - (bounds.left + bounds.width / 2);
+      const offsetY = bounds.top + bounds.height / 2 - event.clientY;
+      if (Math.hypot(offsetX, offsetY) < 2) {
+        return undefined;
+      }
+      return Math.atan2(offsetY, offsetX);
+    }
   } catch (error) {
     const detail = error instanceof Error ? ` ${error.message}` : "";
     setStatus(`WebGL renderer could not start.${detail}`);
