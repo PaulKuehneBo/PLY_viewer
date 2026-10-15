@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { PLYLoader } from "three/addons/loaders/PLYLoader.js";
+import { parseGaussianSplatPly } from "../plyParser.js";
 import { parsePlyTopology } from "./plyTopology.js";
 
 export class PLYModel extends THREE.Group {
@@ -9,6 +10,49 @@ export class PLYModel extends THREE.Group {
 }
 
 export function createPlyModel(data: ArrayBuffer): PLYModel | undefined {
+  const gaussianSplat = parseGaussianSplatPly(data);
+  if (gaussianSplat) {
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute(
+      "position",
+      new THREE.BufferAttribute(gaussianSplat.positions, 3),
+    );
+    geometry.setAttribute(
+      "color",
+      new THREE.BufferAttribute(gaussianSplat.colors, 3),
+    );
+    geometry.setAttribute(
+      "gaussianPointSize",
+      new THREE.BufferAttribute(gaussianSplat.pointSizes, 1),
+    );
+    geometry.computeBoundingSphere();
+
+    const model = new PLYModel(geometry);
+    const material = new THREE.PointsMaterial({
+      color: 0xffffff,
+      size: 1,
+      sizeAttenuation: true,
+      vertexColors: true,
+    });
+    material.onBeforeCompile = (shader) => {
+      shader.vertexShader = shader.vertexShader.replace(
+        "#include <common>",
+        "#include <common>\nattribute float gaussianPointSize;",
+      );
+      shader.vertexShader = shader.vertexShader.replace(
+        "gl_PointSize = size;",
+        "gl_PointSize = size * gaussianPointSize;",
+      );
+      shader.vertexShader = shader.vertexShader.replace(
+        "#include <logdepthbuf_vertex>",
+        "#include <logdepthbuf_vertex>\ngl_PointSize = min(gl_PointSize, 128.0);",
+      );
+    };
+    material.customProgramCacheKey = () => "gaussian-splat-point-size";
+    model.add(new THREE.Points(geometry, material));
+    return model;
+  }
+
   const topology = parsePlyTopology(data);
   const hasFaces = topology.faceCount > 0;
   const geometry = new PLYLoader().parse(data);

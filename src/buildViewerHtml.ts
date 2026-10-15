@@ -168,6 +168,7 @@ export function buildPlyViewerHtml(
 				#remove-model-dialog::backdrop { background: rgba(0, 0, 0, 0.62); }
 				#remove-model-dialog h2 { margin: 0 0 10px; font-size: 16px; }
 				#remove-model-dialog p { margin: 0; color: #b8c9cc; overflow-wrap: anywhere; }
+				#remove-model-dialog .dialog-shortcuts { margin-top: 10px; font-size: 12px; }
 				#remove-model-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
 				#remove-model-dialog-actions button {
 					border: 1px solid #527c7c;
@@ -275,9 +276,10 @@ export function buildPlyViewerHtml(
 			<dialog id="remove-model-dialog" aria-labelledby="remove-model-title">
 				<h2 id="remove-model-title">Remove model?</h2>
 				<p>Remove <strong id="remove-model-name"></strong> from the viewer?</p>
+				<p class="dialog-shortcuts">Press Y to remove or N to cancel.</p>
 				<div id="remove-model-dialog-actions">
-					<button id="cancel-remove-model" type="button">Cancel</button>
-					<button id="confirm-remove-model" type="button">Remove model</button>
+					<button id="cancel-remove-model" type="button">No (N)</button>
+					<button id="confirm-remove-model" type="button">Yes, remove (Y)</button>
 				</div>
 			</dialog>
 			<section id="model-info" aria-label="PLY model information">
@@ -287,9 +289,9 @@ export function buildPlyViewerHtml(
 				</header>
 				<dl id="model-info-content">
 					<div><dt>Points</dt><dd id="point-count">—</dd></div>
-					<div><dt>Size X</dt><dd id="dimension-x">—</dd></div>
-					<div><dt>Size Y</dt><dd id="dimension-y">—</dd></div>
-					<div><dt>Size Z</dt><dd id="dimension-z">—</dd></div>
+					<div><dt>Target X</dt><dd id="target-x">—</dd></div>
+					<div><dt>Target Y</dt><dd id="target-y">—</dd></div>
+					<div><dt>Target Z</dt><dd id="target-z">—</dd></div>
 				</dl>
 			</section>
 			<script id="ply-url" type="application/json">${JSON.stringify(plyFileUrl)}</script>

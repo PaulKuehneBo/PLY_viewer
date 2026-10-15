@@ -11,6 +11,7 @@ VS-Code-Erweiterung zum Anzeigen von PLY-Punktwolken und Meshes in einem Webview
 - `PLYLoader` lädt die Originaldatei im Webview; der Extension Host serialisiert nicht mehr alle Vertices und Faces als JSON.
 - Punktwolken werden als `Points`, Meshes als `MeshStandardMaterial` gerendert. Vertex- und Face-RGB-Farben werden als Three.js-Farbattribute übernommen; vorhandene Normalen werden genutzt, andernfalls für Meshes berechnet.
 - Die Kamerasteuerung bleibt eigene sourcemap-fähige TypeScript-Logik und verwendet kein `OrbitControls`. Die Kamera rotiert um den Ursprung und blickt weiterhin auf ihn.
+- Ein großer farbiger `AxesHelper` bleibt fest am Weltursprung; ein kleinerer `AxesHelper` markiert separat das aktuelle Kamera-Target bzw. den per Strg-Klick gewählten Picker-Punkt. Beide zeigen die Weltachsen.
 - `4`/`6` drehen um die aktuelle lokale Up-Achse, `8`/`2` um die aktuelle lokale Rechtsachse. Die Nummernblock-Tasten funktionieren ebenfalls; pro Tastenschritt sind es 5 Grad.
 - Ziehen mit der linken Maustaste dreht die Kamera ebenfalls. Das WebGL-Canvas erhält den Fokus für Tastatureingaben.
 
@@ -18,7 +19,7 @@ VS-Code-Erweiterung zum Anzeigen von PLY-Punktwolken und Meshes in einem Webview
 
 - `src/extension.ts` registriert den readonly Custom Editor für `.ply`-Dateien sowie den Dateiauswahlbefehl und öffnet den Webview.
 - Der Extension Host übergibt die initiale PLY-URI; der Webview lädt sie direkt mit `PLYLoader`. Weitere Dateien aus dem Extension-Webview werden vom Extension Host mit `workspace.fs` gelesen und als ArrayBuffer an den Webview übertragen.
-- `src/plyParser.ts` ist der frühere zeilenbasierte ASCII-Parser und wird vom aktuellen Viewer nicht mehr verwendet.
+- `src/plyParser.ts` erkennt und liest GS-Splat-PLYs im ASCII- und Binärformat; der Webview rendert sie als einfache farbige Punktwolken.
 - `src/buildViewerHtml.ts` erstellt das Webview-HTML, setzt die Content Security Policy und Import Map für Three.js sowie die PLY-Datei-URL.
 - `src/webview/index.ts` enthält `PLYLoader`, WebGL-Szene, PerspectiveCamera sowie die eigene Tastatur- und Pointer-Steuerung.
 - `out/` enthält die von TypeScript erzeugten Dateien. `out/webview/` enthält das Webview-JavaScript und die Sourcemaps.
@@ -27,6 +28,8 @@ VS-Code-Erweiterung zum Anzeigen von PLY-Punktwolken und Meshes in einem Webview
 ## PLY-Unterstützung und Grenzen
 
 Der aktive `PLYLoader` unterstützt ASCII- und binäre PLY-Geometrie sowie gängige Position-, Normalen-, UV- und RGB-Properties. Standardmäßige Vertex- und Face-Farben werden dargestellt. Zusätzliche, nicht standardisierte Properties müssen gegebenenfalls über `setPropertyNameMapping` abgebildet werden.
+
+GS-Splat-PLYs mit `f_dc_0..2`, `opacity`, `scale_0..2` und `rot_0` werden separat als farbige Punktwolke geladen. Die RGB-Farbe wird aus dem DC-SH-Anteil berechnet. Die logarithmischen Achsenskalierungen werden exponentiert und zu einem mittleren Punktdurchmesser zusammengefasst; ein Shader skaliert jeden Punkt perspektivisch. Punktgrößen sind auf 128 Pixel begrenzt. Rotation, Opazität und höhere SH-Koeffizienten werden weiterhin ignoriert; die Punkte stellen daher keine orientierten Ellipsoide oder echten Gaussian Splats dar. ASCII, Binary Little Endian und Binary Big Endian werden unterstützt.
 
 PLY definiert kein breit unterstütztes Materialsystem wie glTF. Three.js-`PLYLoader` übernimmt Geometrie, Farben, Normalen und UVs, aber keine portablen PBR-Materialien, Texturdateien oder allgemeinen `material_index`-Zuordnungen. Der Viewer verwendet deshalb ein `MeshStandardMaterial` mit Vertexfarben, wenn Farbattribute existieren, sonst ein türkisfarbenes Standardmaterial. Texturen oder materialspezifische Parameter aus proprietären PLY-Properties sind nicht automatisch umgesetzt.
 

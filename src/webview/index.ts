@@ -28,9 +28,9 @@ const modelInfoPanel = document.querySelector<HTMLElement>("#model-info");
 const modelInfoToggle =
   document.querySelector<HTMLButtonElement>("#toggle-model-info");
 const pointCountNode = document.querySelector<HTMLElement>("#point-count");
-const dimensionXNode = document.querySelector<HTMLElement>("#dimension-x");
-const dimensionYNode = document.querySelector<HTMLElement>("#dimension-y");
-const dimensionZNode = document.querySelector<HTMLElement>("#dimension-z");
+const targetXNode = document.querySelector<HTMLElement>("#target-x");
+const targetYNode = document.querySelector<HTMLElement>("#target-y");
+const targetZNode = document.querySelector<HTMLElement>("#target-z");
 const vscodeApi = (
   window as Window & {
     acquireVsCodeApi?: () => {
@@ -73,7 +73,14 @@ if (canvas && plyUrlNode) {
   const plyOpenFileButton = openFileButton;
   try {
     const viewer = createViewerScene(viewerCanvas);
-    const { scene, camera, targetAxes, fieldOfView, render, scheduleRender } =
+    const {
+      scene,
+      camera,
+      targetAxes,
+      fieldOfView,
+      render,
+      scheduleRender,
+    } =
       viewer;
     const cameraController = createCameraController(
       camera,
@@ -110,7 +117,6 @@ if (canvas && plyUrlNode) {
           model,
           element: addModelEntry(fileName, model),
         });
-        updateModelInfo(model.geometry);
         if (isFirstModel) {
           cameraController.frameGeometry(
             [model.geometry],
@@ -119,6 +125,8 @@ if (canvas && plyUrlNode) {
             fieldOfView,
           );
         }
+        updateModelInfo(model.geometry);
+        updateTargetInfo(cameraController.getTarget());
         setStatus("");
         render();
         viewerCanvas.focus();
@@ -208,6 +216,7 @@ if (canvas && plyUrlNode) {
       const visibleModels = getVisibleModels();
       if (visibleModels.length > 0) {
         updateModelInfo(visibleModels[0].geometry);
+        updateTargetInfo(cameraController.getTarget());
       } else {
         clearModelInfo();
       }
@@ -274,6 +283,18 @@ if (canvas && plyUrlNode) {
     );
 
     window.addEventListener("keydown", (event) => {
+      if (removeModelDialog?.open) {
+        const dialogKey = event.key.toLowerCase();
+        if (dialogKey === "y") {
+          event.preventDefault();
+          confirmRemoveModelButton?.click();
+        } else if (dialogKey === "n") {
+          event.preventDefault();
+          cancelRemoveModelButton?.click();
+        }
+        return;
+      }
+
       if (event.altKey || event.ctrlKey || event.metaKey) {
         return;
       }
@@ -336,6 +357,7 @@ if (canvas && plyUrlNode) {
           return;
       }
 
+      updateTargetInfo(cameraController.getTarget());
       event.preventDefault();
       scheduleRender();
     });
@@ -354,6 +376,7 @@ if (canvas && plyUrlNode) {
         }
 
         cameraController.setTarget(targetFromPointer);
+        updateTargetInfo(cameraController.getTarget());
         scheduleRender();
         event.preventDefault();
         return;
@@ -481,26 +504,27 @@ if (canvas && plyUrlNode) {
 
 function updateModelInfo(geometry: THREE.BufferGeometry): void {
   const position = geometry.getAttribute("position");
-  geometry.computeBoundingBox();
-  const size = geometry.boundingBox?.getSize(new THREE.Vector3());
-  if (!position || !size) {
+  if (!position) {
     return;
   }
 
-  const formatNumber = new Intl.NumberFormat(undefined, {
-    maximumFractionDigits: 3,
-  });
   if (pointCountNode) {
     pointCountNode.textContent = new Intl.NumberFormat().format(position.count);
   }
-  if (dimensionXNode) {
-    dimensionXNode.textContent = formatNumber.format(size.x);
+}
+
+function updateTargetInfo(target: THREE.Vector3): void {
+  const formatNumber = new Intl.NumberFormat(undefined, {
+    maximumFractionDigits: 3,
+  });
+  if (targetXNode) {
+    targetXNode.textContent = formatNumber.format(target.x);
   }
-  if (dimensionYNode) {
-    dimensionYNode.textContent = formatNumber.format(size.y);
+  if (targetYNode) {
+    targetYNode.textContent = formatNumber.format(target.y);
   }
-  if (dimensionZNode) {
-    dimensionZNode.textContent = formatNumber.format(size.z);
+  if (targetZNode) {
+    targetZNode.textContent = formatNumber.format(target.z);
   }
 }
 
@@ -508,13 +532,13 @@ function clearModelInfo(): void {
   if (pointCountNode) {
     pointCountNode.textContent = "—";
   }
-  if (dimensionXNode) {
-    dimensionXNode.textContent = "—";
+  if (targetXNode) {
+    targetXNode.textContent = "—";
   }
-  if (dimensionYNode) {
-    dimensionYNode.textContent = "—";
+  if (targetYNode) {
+    targetYNode.textContent = "—";
   }
-  if (dimensionZNode) {
-    dimensionZNode.textContent = "—";
+  if (targetZNode) {
+    targetZNode.textContent = "—";
   }
 }

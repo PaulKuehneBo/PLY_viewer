@@ -30,7 +30,10 @@ export function createViewerScene(canvas: HTMLCanvasElement) {
     0.01,
     1000,
   );
-  const targetAxes = new THREE.AxesHelper(1.5);
+  const worldOriginAxes = new THREE.AxesHelper(1.5);
+  scene.add(worldOriginAxes);
+
+  const targetAxes = new THREE.AxesHelper(0.5);
   scene.add(targetAxes);
 
   let renderScheduled = false;
@@ -60,6 +63,7 @@ export function createViewerScene(canvas: HTMLCanvasElement) {
     renderer,
     scene,
     camera,
+    worldOriginAxes,
     targetAxes,
     fieldOfView: FIELD_OF_VIEW,
     render,

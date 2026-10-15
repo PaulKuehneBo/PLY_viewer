@@ -2,8 +2,8 @@
   "compilerOptions": {
     "module": "es2022",
     "target": "ES2022",
-    "outDir": "../../out/webview",
-    "rootDir": ".",
+    "outDir": "../../out",
+    "rootDir": "..",
     "lib": [
       "DOM",
       "ES2022"
@@ -14,6 +14,7 @@
     "moduleResolution": "bundler"
   },
   "include": [
-    "./**/*.ts"
+    "./**/*.ts",
+    "../plyParser.ts"
   ]
 }

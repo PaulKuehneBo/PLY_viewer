@@ -49,6 +49,10 @@ export function createCameraController(
     syncCamera();
   }
 
+  function getTarget(): THREE.Vector3 {
+    return cameraTarget.clone();
+  }
+
   function centerTargetInView(): void {
     syncCamera();
     camera.lookAt(cameraTarget);
@@ -230,6 +234,7 @@ export function createCameraController(
     basis,
     rotate,
     setTarget,
+    getTarget,
     centerTargetInView,
     panView,
     zoom,

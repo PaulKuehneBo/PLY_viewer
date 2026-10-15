@@ -1,105 +1,417 @@
-import * as fs from 'fs';
+type PlyFormat = "ascii" | "binary_little_endian" | "binary_big_endian";
+type PlyScalarType =
+  | "char"
+  | "int8"
+  | "uchar"
+  | "uint8"
+  | "short"
+  | "int16"
+  | "ushort"
+  | "uint16"
+  | "int"
+  | "int32"
+  | "uint"
+  | "uint32"
+  | "float"
+  | "float32"
+  | "double"
+  | "float64";
 
-export interface PlyVertex {
-    x: number;
-    y: number;
-    z: number;
-    r?: number;
-    g?: number;
-    b?: number;
+type PlyProperty =
+  | { name: string; type: PlyScalarType }
+  | {
+      name: string;
+      countType: PlyScalarType;
+      itemType: PlyScalarType;
+      list: true;
+    };
+
+interface PlyElement {
+  name: string;
+  count: number;
+  properties: PlyProperty[];
 }
 
-export interface PlyFace {
-    indices: number[];
+interface GaussianSplatPly {
+  format: PlyFormat;
+  bodyOffset: number;
+  elements: PlyElement[];
+  vertexElement: PlyElement;
 }
 
-export interface ParsedPly {
-    vertices: PlyVertex[];
-    faces: PlyFace[];
+export interface ParsedGaussianSplat {
+  positions: Float32Array;
+  colors: Float32Array;
+  pointSizes: Float32Array;
+  vertexCount: number;
 }
 
-export function parsePlyFile(filePath: string): ParsedPly {
-    const content = fs.readFileSync(filePath, 'utf8');
-    const lines = content.split(/\r?\n/);
+const SH_C0 = 0.28209479177387814;
+const REQUIRED_GAUSSIAN_PROPERTIES = [
+  "x",
+  "y",
+  "z",
+  "f_dc_0",
+  "f_dc_1",
+  "f_dc_2",
+  "opacity",
+  "scale_0",
+  "scale_1",
+  "scale_2",
+  "rot_0",
+] as const;
+const INTEGER_TYPES = new Set<PlyScalarType>([
+  "char",
+  "int8",
+  "uchar",
+  "uint8",
+  "short",
+  "int16",
+  "ushort",
+  "uint16",
+  "int",
+  "int32",
+  "uint",
+  "uint32",
+]);
+const SCALAR_TYPES = new Set<string>([
+  ...INTEGER_TYPES,
+  "float",
+  "float32",
+  "double",
+  "float64",
+]);
 
-    let vertexCount = 0;
-    let faceCount = 0;
-    let currentIndex = 0;
-    let headerDone = false;
+export function parseGaussianSplatPly(
+  data: ArrayBuffer,
+): ParsedGaussianSplat | undefined {
+  const bytes = new Uint8Array(data);
+  const header = parseHeader(bytes);
+  const propertyNames = new Set(
+    header.vertexElement.properties.map((property) => property.name),
+  );
+  if (!REQUIRED_GAUSSIAN_PROPERTIES.every((name) => propertyNames.has(name))) {
+    return undefined;
+  }
 
-    while (currentIndex < lines.length && !headerDone) {
-        const line = lines[currentIndex].trim();
-        if (!line) {
-            currentIndex += 1;
-            continue;
+  const vertexCount = header.vertexElement.count;
+  if (vertexCount === 0) {
+    return undefined;
+  }
+  const positions = new Float32Array(vertexCount * 3);
+  const colors = new Float32Array(vertexCount * 3);
+  const pointSizes = new Float32Array(vertexCount);
+  const reader =
+    header.format === "ascii"
+      ? new AsciiReader(bytes, header.bodyOffset)
+      : new BinaryReader(data, header.bodyOffset, header.format);
+
+  for (const element of header.elements) {
+    for (let recordIndex = 0; recordIndex < element.count; recordIndex += 1) {
+      let x: number | undefined;
+      let y: number | undefined;
+      let z: number | undefined;
+      let red: number | undefined;
+      let green: number | undefined;
+      let blue: number | undefined;
+      let scaleX: number | undefined;
+      let scaleY: number | undefined;
+      let scaleZ: number | undefined;
+      for (const property of element.properties) {
+        if ("list" in property) {
+          const count = reader.read(property.countType);
+          if (!Number.isSafeInteger(count) || count < 0) {
+            throw new Error("Invalid PLY list length.");
+          }
+          for (let valueIndex = 0; valueIndex < count; valueIndex += 1) {
+            reader.read(property.itemType);
+          }
+        } else {
+          const value = reader.read(property.type);
+          if (element === header.vertexElement) {
+            switch (property.name) {
+              case "x":
+                x = value;
+                break;
+              case "y":
+                y = value;
+                break;
+              case "z":
+                z = value;
+                break;
+              case "f_dc_0":
+                red = value;
+                break;
+              case "f_dc_1":
+                green = value;
+                break;
+              case "f_dc_2":
+                blue = value;
+                break;
+              case "scale_0":
+                scaleX = value;
+                break;
+              case "scale_1":
+                scaleY = value;
+                break;
+              case "scale_2":
+                scaleZ = value;
+                break;
+            }
+          }
         }
+      }
 
-        if (line === 'end_header') {
-            headerDone = true;
-            currentIndex += 1;
-            break;
-        }
+      if (element !== header.vertexElement) {
+        continue;
+      }
 
-        const parts = line.split(/\s+/);
-        if (parts[0] === 'element' && parts[1] === 'vertex') {
-            vertexCount = Number.parseInt(parts[2], 10);
-        }
-        if (parts[0] === 'element' && parts[1] === 'face') {
-            faceCount = Number.parseInt(parts[2], 10);
-        }
+      const offset = recordIndex * 3;
+      positions[offset] = requireFinite(x, "x");
+      positions[offset + 1] = requireFinite(y, "y");
+      positions[offset + 2] = requireFinite(z, "z");
+      colors[offset] = toColor(red);
+      colors[offset + 1] = toColor(green);
+      colors[offset + 2] = toColor(blue);
+      pointSizes[recordIndex] = toPointSize(scaleX, scaleY, scaleZ);
+    }
+    if (element === header.vertexElement) {
+      break;
+    }
+  }
 
-        currentIndex += 1;
+  return {
+    positions,
+    colors,
+    pointSizes,
+    vertexCount: header.vertexElement.count,
+  };
+}
+
+function parseHeader(bytes: Uint8Array): GaussianSplatPly {
+  const decoder = new TextDecoder("ascii");
+  const elements: PlyElement[] = [];
+  let currentElement: PlyElement | undefined;
+  let format: PlyFormat | undefined;
+  let bodyOffset = -1;
+  let lineStart = 0;
+
+  for (let index = 0; index < bytes.length; index += 1) {
+    if (bytes[index] !== 10) {
+      continue;
+    }
+    const line = decoder.decode(bytes.subarray(lineStart, index)).trim();
+    lineStart = index + 1;
+    if (line === "end_header") {
+      if (currentElement) {
+        elements.push(currentElement);
+      }
+      bodyOffset = lineStart;
+      break;
     }
 
-    if (!headerDone) {
-        return { vertices: [], faces: [] };
+    const parts = line.split(/\s+/);
+    if (parts[0] === "format") {
+      const candidate = parts[1];
+      if (
+        candidate !== "ascii" &&
+        candidate !== "binary_little_endian" &&
+        candidate !== "binary_big_endian"
+      ) {
+        throw new Error(`Unsupported PLY format: ${candidate ?? "missing"}.`);
+      }
+      format = candidate;
+    } else if (parts[0] === "element") {
+      if (currentElement) {
+        elements.push(currentElement);
+      }
+      const count = Number(parts[2]);
+      if (!Number.isSafeInteger(count) || count < 0 || count > bytes.length) {
+        throw new Error(
+          `Invalid PLY element count for ${parts[1] ?? "element"}.`,
+        );
+      }
+      currentElement = {
+        name: parts[1] ?? "",
+        count,
+        properties: [],
+      };
+    } else if (parts[0] === "property") {
+      if (!currentElement) {
+        throw new Error("PLY property appears before an element declaration.");
+      }
+      if (parts[1] === "list") {
+        const countType = parseScalarType(parts[2]);
+        const itemType = parseScalarType(parts[3]);
+        const name = parts[4];
+        if (!name || !INTEGER_TYPES.has(countType)) {
+          throw new Error("Invalid PLY list property declaration.");
+        }
+        currentElement.properties.push({
+          name,
+          countType,
+          itemType,
+          list: true,
+        });
+      } else {
+        const type = parseScalarType(parts[1]);
+        const name = parts[2];
+        if (!name) {
+          throw new Error("Invalid PLY scalar property declaration.");
+        }
+        currentElement.properties.push({ name, type });
+      }
     }
+  }
 
-    const vertices: PlyVertex[] = [];
-    for (let i = 0; i < vertexCount && currentIndex < lines.length; i += 1, currentIndex += 1) {
-        const line = lines[currentIndex]?.trim();
-        if (!line) {
-            i -= 1;
-            continue;
-        }
+  if (bodyOffset < 0 || !format) {
+    throw new Error(
+      "PLY header is incomplete or has no supported format declaration.",
+    );
+  }
+  if (decoder.decode(bytes.subarray(0, 3)) !== "ply") {
+    throw new Error("Invalid PLY file signature.");
+  }
 
-        const values = line.split(/\s+/).map((value) => Number.parseFloat(value));
-        if (values.length < 3) {
-            continue;
-        }
+  const vertexElement = elements.find((element) => element.name === "vertex");
+  if (!vertexElement) {
+    throw new Error("PLY file does not contain a vertex element.");
+  }
+  return { format, bodyOffset, elements, vertexElement };
+}
 
-        const vertex: PlyVertex = {
-            x: values[0],
-            y: values[1],
-            z: values[2],
-        };
+function parseScalarType(value: string | undefined): PlyScalarType {
+  if (!value || !SCALAR_TYPES.has(value)) {
+    throw new Error(`Unsupported PLY scalar type: ${value ?? "missing"}.`);
+  }
+  return value as PlyScalarType;
+}
 
-        if (values.length >= 6) {
-            vertex.r = values[3];
-            vertex.g = values[4];
-            vertex.b = values[5];
-        }
+interface PlyReader {
+  read(type: PlyScalarType): number;
+}
 
-        vertices.push(vertex);
+class AsciiReader implements PlyReader {
+  private offset: number;
+  private readonly decoder = new TextDecoder("ascii");
+
+  constructor(
+    private readonly bytes: Uint8Array,
+    offset: number,
+  ) {
+    this.offset = offset;
+  }
+
+  read(type: PlyScalarType): number {
+    while (this.offset < this.bytes.length && this.bytes[this.offset] <= 32) {
+      this.offset += 1;
     }
-
-    const faces: PlyFace[] = [];
-    for (let i = 0; i < faceCount && currentIndex < lines.length; i += 1, currentIndex += 1) {
-        const line = lines[currentIndex]?.trim();
-        if (!line) {
-            i -= 1;
-            continue;
-        }
-
-        const values = line.split(/\s+/).map((value) => Number.parseInt(value, 10));
-        if (values.length < 4) {
-            continue;
-        }
-
-        const count = values[0];
-        const indices = values.slice(1, 1 + count);
-        faces.push({ indices });
+    const start = this.offset;
+    while (this.offset < this.bytes.length && this.bytes[this.offset] > 32) {
+      this.offset += 1;
     }
+    if (start === this.offset) {
+      throw new Error("PLY data ended before all declared values were read.");
+    }
+    const token = this.decoder.decode(this.bytes.subarray(start, this.offset));
+    const value = INTEGER_TYPES.has(type)
+      ? Number.parseInt(token, 10)
+      : Number(token);
+    if (!Number.isFinite(value)) {
+      throw new Error(`Invalid PLY numeric value: ${token}.`);
+    }
+    return value;
+  }
+}
 
-    return { vertices, faces };
+class BinaryReader implements PlyReader {
+  private offset: number;
+  private readonly view: DataView;
+  private readonly littleEndian: boolean;
+
+  constructor(
+    data: ArrayBuffer,
+    offset: number,
+    format: Exclude<PlyFormat, "ascii">,
+  ) {
+    this.offset = offset;
+    this.view = new DataView(data);
+    this.littleEndian = format === "binary_little_endian";
+  }
+
+  read(type: PlyScalarType): number {
+    const offset = this.offset;
+    const view = this.view;
+    let value: number;
+    switch (type) {
+      case "char":
+      case "int8":
+        value = view.getInt8(offset);
+        this.offset += 1;
+        break;
+      case "uchar":
+      case "uint8":
+        value = view.getUint8(offset);
+        this.offset += 1;
+        break;
+      case "short":
+      case "int16":
+        value = view.getInt16(offset, this.littleEndian);
+        this.offset += 2;
+        break;
+      case "ushort":
+      case "uint16":
+        value = view.getUint16(offset, this.littleEndian);
+        this.offset += 2;
+        break;
+      case "int":
+      case "int32":
+        value = view.getInt32(offset, this.littleEndian);
+        this.offset += 4;
+        break;
+      case "uint":
+      case "uint32":
+        value = view.getUint32(offset, this.littleEndian);
+        this.offset += 4;
+        break;
+      case "float":
+      case "float32":
+        value = view.getFloat32(offset, this.littleEndian);
+        this.offset += 4;
+        break;
+      case "double":
+      case "float64":
+        value = view.getFloat64(offset, this.littleEndian);
+        this.offset += 8;
+        break;
+    }
+    return value;
+  }
+}
+
+function requireFinite(value: number | undefined, property: string): number {
+  if (value === undefined || !Number.isFinite(value)) {
+    throw new Error(`Gaussian PLY vertex has an invalid ${property} value.`);
+  }
+  return value;
+}
+
+function toColor(value: number | undefined): number {
+  const channel = requireFinite(value, "f_dc");
+  return Math.max(0, Math.min(1, 0.5 + SH_C0 * channel));
+}
+
+function toPointSize(
+  scaleX: number | undefined,
+  scaleY: number | undefined,
+  scaleZ: number | undefined,
+): number {
+  const x = Math.exp(requireFinite(scaleX, "scale_0"));
+  const y = Math.exp(requireFinite(scaleY, "scale_1"));
+  const z = Math.exp(requireFinite(scaleZ, "scale_2"));
+  const diameter = (2 * (x + y + z)) / 3;
+  if (!Number.isFinite(diameter)) {
+    throw new Error("Gaussian PLY vertex has an invalid scale.");
+  }
+  return diameter;
 }
