@@ -4,7 +4,10 @@ import { parseGaussianSplatPly } from "../plyParser.js";
 import { parsePlyTopology } from "./plyTopology.js";
 
 export class PLYModel extends THREE.Group {
-  constructor(readonly geometry: THREE.BufferGeometry) {
+  constructor(
+    readonly geometry: THREE.BufferGeometry,
+    readonly opacityGamma: { value: number } | undefined = undefined,
+  ) {
     super();
   }
 }
@@ -22,23 +25,49 @@ export function createPlyModel(data: ArrayBuffer): PLYModel | undefined {
       new THREE.BufferAttribute(gaussianSplat.colors, 3),
     );
     geometry.setAttribute(
+      "gaussianOpacity",
+      new THREE.BufferAttribute(gaussianSplat.opacities, 1),
+    );
+    geometry.setAttribute(
       "gaussianPointSize",
       new THREE.BufferAttribute(gaussianSplat.pointSizes, 1),
     );
     geometry.computeBoundingSphere();
 
-    const model = new PLYModel(geometry);
+    const opacityGamma = { value: 1 };
+    const model = new PLYModel(geometry, opacityGamma);
     const material = new THREE.PointsMaterial({
       color: 0xffffff,
       size: 1,
       sizeAttenuation: true,
       vertexColors: true,
+      transparent: true,
+      depthTest: true,
+      depthWrite: false,
     });
     material.onBeforeCompile = (shader) => {
       shader.vertexShader = shader.vertexShader.replace(
         "#include <common>",
-        "#include <common>\nattribute float gaussianPointSize;",
+        "#include <common>\nattribute float gaussianPointSize;\nattribute float gaussianOpacity;\nvarying float vGaussianOpacity;",
       );
+      shader.vertexShader = shader.vertexShader.replace(
+        "#include <color_vertex>",
+        "#include <color_vertex>\nvGaussianOpacity = gaussianOpacity;",
+      );
+      shader.fragmentShader = shader.fragmentShader.replace(
+        "#include <common>",
+        "#include <common>\nuniform float gaussianOpacityGamma;\nvarying float vGaussianOpacity;",
+      );
+      shader.fragmentShader = shader.fragmentShader.replace(
+        "#include <color_fragment>",
+        `#include <color_fragment>
+vec2 gaussianPointCoord = gl_PointCoord * 2.0 - 1.0;
+float gaussianRadiusSquared = dot(gaussianPointCoord, gaussianPointCoord);
+if (gaussianRadiusSquared > 1.0) discard;
+float adjustedOpacity = pow(max(vGaussianOpacity, 0.000001), gaussianOpacityGamma);
+diffuseColor.a *= adjustedOpacity * exp(-4.5 * gaussianRadiusSquared);`,
+      );
+      shader.uniforms.gaussianOpacityGamma = opacityGamma;
       shader.vertexShader = shader.vertexShader.replace(
         "gl_PointSize = size;",
         "gl_PointSize = size * gaussianPointSize;",
@@ -48,7 +77,7 @@ export function createPlyModel(data: ArrayBuffer): PLYModel | undefined {
         "#include <logdepthbuf_vertex>\ngl_PointSize = min(gl_PointSize, 128.0);",
       );
     };
-    material.customProgramCacheKey = () => "gaussian-splat-point-size";
+    material.customProgramCacheKey = () => "gaussian-splat-point-size-opacity-gamma";
     model.add(new THREE.Points(geometry, material));
     return model;
   }

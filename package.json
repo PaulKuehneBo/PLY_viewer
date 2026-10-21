@@ -3,8 +3,9 @@
   "icon": "resources/viewer_logo.png",
   "displayName": "Posed Camera",
   "description": "VS Code extension for viewing PLY point cloud data in a webview.",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "publisher": "local",
+  "author": "Dirk Raproeger",
   "engines": {
     "vscode": "^1.90.0"
   },

@@ -42,6 +42,7 @@ interface GaussianSplatPly {
 export interface ParsedGaussianSplat {
   positions: Float32Array;
   colors: Float32Array;
+  opacities: Float32Array;
   pointSizes: Float32Array;
   vertexCount: number;
 }
@@ -100,6 +101,7 @@ export function parseGaussianSplatPly(
   }
   const positions = new Float32Array(vertexCount * 3);
   const colors = new Float32Array(vertexCount * 3);
+  const opacities = new Float32Array(vertexCount);
   const pointSizes = new Float32Array(vertexCount);
   const reader =
     header.format === "ascii"
@@ -114,6 +116,7 @@ export function parseGaussianSplatPly(
       let red: number | undefined;
       let green: number | undefined;
       let blue: number | undefined;
+      let opacity: number | undefined;
       let scaleX: number | undefined;
       let scaleY: number | undefined;
       let scaleZ: number | undefined;
@@ -148,6 +151,9 @@ export function parseGaussianSplatPly(
               case "f_dc_2":
                 blue = value;
                 break;
+              case "opacity":
+                opacity = value;
+                break;
               case "scale_0":
                 scaleX = value;
                 break;
@@ -173,6 +179,7 @@ export function parseGaussianSplatPly(
       colors[offset] = toColor(red);
       colors[offset + 1] = toColor(green);
       colors[offset + 2] = toColor(blue);
+      opacities[recordIndex] = toOpacity(opacity);
       pointSizes[recordIndex] = toPointSize(scaleX, scaleY, scaleZ);
     }
     if (element === header.vertexElement) {
@@ -183,6 +190,7 @@ export function parseGaussianSplatPly(
   return {
     positions,
     colors,
+    opacities,
     pointSizes,
     vertexCount: header.vertexElement.count,
   };
@@ -399,6 +407,15 @@ function requireFinite(value: number | undefined, property: string): number {
 function toColor(value: number | undefined): number {
   const channel = requireFinite(value, "f_dc");
   return Math.max(0, Math.min(1, 0.5 + SH_C0 * channel));
+}
+
+function toOpacity(value: number | undefined): number {
+  const logit = requireFinite(value, "opacity");
+  if (logit >= 0) {
+    return 1 / (1 + Math.exp(-logit));
+  }
+  const exponential = Math.exp(logit);
+  return exponential / (1 + exponential);
 }
 
 function toPointSize(

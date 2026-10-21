@@ -251,6 +251,22 @@ export function buildPlyViewerHtml(
 					gap: 12px;
 					padding-top: 5px;
 				}
+				#model-info-content > .opacity-gamma-control {
+					display: block;
+					margin-top: 10px;
+					border-top: 1px solid #30464a;
+					padding-top: 9px;
+				}
+				.opacity-gamma-value {
+					display: flex;
+					justify-content: space-between;
+					align-items: center;
+				}
+				#opacity-gamma {
+					width: 100%;
+					margin: 8px 0 0;
+					accent-color: #60b6a5;
+				}
 				#model-info-content dt { color: #a9c0c2; }
 				#model-info-content dd { margin: 0; font-variant-numeric: tabular-nums; }
 				#model-info.collapsed #model-info-content { display: none; }
@@ -292,6 +308,13 @@ export function buildPlyViewerHtml(
 					<div><dt>Target X</dt><dd id="target-x">—</dd></div>
 					<div><dt>Target Y</dt><dd id="target-y">—</dd></div>
 					<div><dt>Target Z</dt><dd id="target-z">—</dd></div>
+					<div class="opacity-gamma-control">
+						<div class="opacity-gamma-value">
+							<label for="opacity-gamma">Opacity gamma</label>
+							<output id="opacity-gamma-value" for="opacity-gamma">1.00</output>
+						</div>
+						<input id="opacity-gamma" type="range" min="0" max="2" step="0.01" value="1" aria-label="Gaussian opacity gamma" />
+					</div>
 				</dl>
 			</section>
 			<script id="ply-url" type="application/json">${JSON.stringify(plyFileUrl)}</script>

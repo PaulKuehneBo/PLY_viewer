@@ -31,6 +31,10 @@ const pointCountNode = document.querySelector<HTMLElement>("#point-count");
 const targetXNode = document.querySelector<HTMLElement>("#target-x");
 const targetYNode = document.querySelector<HTMLElement>("#target-y");
 const targetZNode = document.querySelector<HTMLElement>("#target-z");
+const opacityGammaSlider =
+  document.querySelector<HTMLInputElement>("#opacity-gamma");
+const opacityGammaValue =
+  document.querySelector<HTMLOutputElement>("#opacity-gamma-value");
 const vscodeApi = (
   window as Window & {
     acquireVsCodeApi?: () => {
@@ -98,7 +102,19 @@ if (canvas && plyUrlNode) {
       model: PLYModel;
       element: HTMLLIElement;
     }> = [];
+    let opacityGamma = Number(opacityGammaSlider?.value ?? 1);
     let pendingRemoval: (typeof models)[number] | undefined;
+
+    opacityGammaSlider?.addEventListener("input", () => {
+      opacityGamma = Number(opacityGammaSlider.value);
+      opacityGammaValue && (opacityGammaValue.value = opacityGamma.toFixed(2));
+      for (const { model } of models) {
+        if (model.opacityGamma) {
+          model.opacityGamma.value = opacityGamma;
+        }
+      }
+      scheduleRender();
+    });
 
     async function loadPly(data: ArrayBuffer, fileName: string): Promise<void> {
       setStatus(`Loading ${fileName}…`);
@@ -107,6 +123,9 @@ if (canvas && plyUrlNode) {
         if (!model) {
           setStatus("PLY file contains no renderable vertices.");
           return;
+        }
+        if (model.opacityGamma) {
+          model.opacityGamma.value = opacityGamma;
         }
 
         const isFirstModel = models.length === 0;
