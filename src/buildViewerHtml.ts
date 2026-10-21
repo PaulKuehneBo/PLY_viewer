@@ -262,6 +262,17 @@ export function buildPlyViewerHtml(
 					justify-content: space-between;
 					align-items: center;
 				}
+				.opacity-invert-control {
+					display: flex;
+					align-items: center;
+					gap: 7px;
+					margin-top: 8px;
+					color: #a9c0c2;
+				}
+				#opacity-invert {
+					margin: 0;
+					accent-color: #60b6a5;
+				}
 				#opacity-gamma {
 					width: 100%;
 					margin: 8px 0 0;
@@ -314,6 +325,10 @@ export function buildPlyViewerHtml(
 							<output id="opacity-gamma-value" for="opacity-gamma">1.00</output>
 						</div>
 						<input id="opacity-gamma" type="range" min="0" max="2" step="0.01" value="1" aria-label="Gaussian opacity gamma" />
+						<label class="opacity-invert-control">
+							<input id="opacity-invert" type="checkbox" />
+							Invert opacity
+						</label>
 					</div>
 				</dl>
 			</section>

@@ -7,6 +7,7 @@ export class PLYModel extends THREE.Group {
   constructor(
     readonly geometry: THREE.BufferGeometry,
     readonly opacityGamma: { value: number } | undefined = undefined,
+    readonly opacityInverted: { value: boolean } | undefined = undefined,
   ) {
     super();
   }
@@ -35,7 +36,8 @@ export function createPlyModel(data: ArrayBuffer): PLYModel | undefined {
     geometry.computeBoundingSphere();
 
     const opacityGamma = { value: 1 };
-    const model = new PLYModel(geometry, opacityGamma);
+    const opacityInverted = { value: false };
+    const model = new PLYModel(geometry, opacityGamma, opacityInverted);
     const material = new THREE.PointsMaterial({
       color: 0xffffff,
       size: 1,
@@ -56,7 +58,7 @@ export function createPlyModel(data: ArrayBuffer): PLYModel | undefined {
       );
       shader.fragmentShader = shader.fragmentShader.replace(
         "#include <common>",
-        "#include <common>\nuniform float gaussianOpacityGamma;\nvarying float vGaussianOpacity;",
+        "#include <common>\nuniform float gaussianOpacityGamma;\nuniform bool gaussianOpacityInverted;\nvarying float vGaussianOpacity;",
       );
       shader.fragmentShader = shader.fragmentShader.replace(
         "#include <color_fragment>",
@@ -64,10 +66,12 @@ export function createPlyModel(data: ArrayBuffer): PLYModel | undefined {
 vec2 gaussianPointCoord = gl_PointCoord * 2.0 - 1.0;
 float gaussianRadiusSquared = dot(gaussianPointCoord, gaussianPointCoord);
 if (gaussianRadiusSquared > 1.0) discard;
-float adjustedOpacity = pow(max(vGaussianOpacity, 0.000001), gaussianOpacityGamma);
+float sourceOpacity = gaussianOpacityInverted ? 1.0 - vGaussianOpacity : vGaussianOpacity;
+float adjustedOpacity = pow(max(sourceOpacity, 0.000001), gaussianOpacityGamma);
 diffuseColor.a *= adjustedOpacity * exp(-4.5 * gaussianRadiusSquared);`,
       );
       shader.uniforms.gaussianOpacityGamma = opacityGamma;
+      shader.uniforms.gaussianOpacityInverted = opacityInverted;
       shader.vertexShader = shader.vertexShader.replace(
         "gl_PointSize = size;",
         "gl_PointSize = size * gaussianPointSize;",

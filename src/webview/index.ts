@@ -35,6 +35,8 @@ const opacityGammaSlider =
   document.querySelector<HTMLInputElement>("#opacity-gamma");
 const opacityGammaValue =
   document.querySelector<HTMLOutputElement>("#opacity-gamma-value");
+const opacityInvertToggle =
+  document.querySelector<HTMLInputElement>("#opacity-invert");
 const vscodeApi = (
   window as Window & {
     acquireVsCodeApi?: () => {
@@ -103,6 +105,7 @@ if (canvas && plyUrlNode) {
       element: HTMLLIElement;
     }> = [];
     let opacityGamma = Number(opacityGammaSlider?.value ?? 1);
+    let opacityInverted = opacityInvertToggle?.checked ?? false;
     let pendingRemoval: (typeof models)[number] | undefined;
 
     opacityGammaSlider?.addEventListener("input", () => {
@@ -111,6 +114,16 @@ if (canvas && plyUrlNode) {
       for (const { model } of models) {
         if (model.opacityGamma) {
           model.opacityGamma.value = opacityGamma;
+        }
+      }
+      scheduleRender();
+    });
+
+    opacityInvertToggle?.addEventListener("change", () => {
+      opacityInverted = opacityInvertToggle.checked;
+      for (const { model } of models) {
+        if (model.opacityInverted) {
+          model.opacityInverted.value = opacityInverted;
         }
       }
       scheduleRender();
@@ -126,6 +139,9 @@ if (canvas && plyUrlNode) {
         }
         if (model.opacityGamma) {
           model.opacityGamma.value = opacityGamma;
+        }
+        if (model.opacityInverted) {
+          model.opacityInverted.value = opacityInverted;
         }
 
         const isFirstModel = models.length === 0;
