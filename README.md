@@ -13,7 +13,7 @@ VS-Code-Erweiterung zum Anzeigen von PLY-Punktwolken und Meshes in einem Webview
 - Die Kamerasteuerung bleibt eigene sourcemap-fähige TypeScript-Logik und verwendet kein `OrbitControls`. Die Kamera rotiert um den Ursprung und blickt weiterhin auf ihn.
 - Ein großer farbiger `AxesHelper` bleibt fest am Weltursprung; ein kleinerer `AxesHelper` markiert separat das aktuelle Kamera-Target bzw. den per Strg-Klick gewählten Picker-Punkt. Beide zeigen die Weltachsen.
 - `4`/`6` drehen um die aktuelle lokale Up-Achse, `8`/`2` um die aktuelle lokale Rechtsachse. Die Nummernblock-Tasten funktionieren ebenfalls; pro Tastenschritt sind es 5 Grad.
-- Ziehen mit der linken Maustaste dreht die Kamera ebenfalls. Das WebGL-Canvas erhält den Fokus für Tastatureingaben.
+- Ziehen mit der linken Maustaste dreht die Kamera; mit Shift wird sie um die Blickrichtung gerollt. Der Rollwinkel wird relativ zur aktuellen Bildschirmprojektion des Kamera-Targets berechnet, nicht relativ zur Viewport-Mitte. Das WebGL-Canvas erhält den Fokus für Tastatureingaben.
 
 ## Aufbau
 

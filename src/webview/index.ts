@@ -536,7 +536,7 @@ if (canvas && plyUrlNode) {
       previousPointerY = event.clientY;
       previousRollAngle =
         activePointerMode === "roll-z"
-          ? pointerAngleAroundViewportCenter(event)
+          ? pointerAngleAroundTarget(event)
           : undefined;
       viewerCanvas.setPointerCapture(event.pointerId);
       viewerCanvas.classList.add("dragging");
@@ -561,7 +561,7 @@ if (canvas && plyUrlNode) {
       }
 
       if (activePointerMode === "roll-z") {
-        const currentRollAngle = pointerAngleAroundViewportCenter(event);
+        const currentRollAngle = pointerAngleAroundTarget(event);
         if (currentRollAngle === undefined) {
           previousRollAngle = undefined;
           return;
@@ -624,12 +624,28 @@ if (canvas && plyUrlNode) {
       vscodeApi?.postMessage({ command: "webviewReady" });
     });
 
-    function pointerAngleAroundViewportCenter(
+    function pointerAngleAroundTarget(
       event: PointerEvent,
     ): number | undefined {
       const bounds = viewerCanvas.getBoundingClientRect();
-      const offsetX = event.clientX - (bounds.left + bounds.width / 2);
-      const offsetY = bounds.top + bounds.height / 2 - event.clientY;
+      camera.updateMatrixWorld(true);
+      const targetOnScreen = cameraController
+        .getTarget()
+        .project(camera);
+      if (
+        !Number.isFinite(targetOnScreen.x) ||
+        !Number.isFinite(targetOnScreen.y) ||
+        !Number.isFinite(targetOnScreen.z) ||
+        targetOnScreen.z < -1 ||
+        targetOnScreen.z > 1
+      ) {
+        return undefined;
+      }
+      const targetX = bounds.left + ((targetOnScreen.x + 1) * bounds.width) / 2;
+      const targetY =
+        bounds.top + ((1 - targetOnScreen.y) * bounds.height) / 2;
+      const offsetX = event.clientX - targetX;
+      const offsetY = targetY - event.clientY;
       if (Math.hypot(offsetX, offsetY) < 2) {
         return undefined;
       }
