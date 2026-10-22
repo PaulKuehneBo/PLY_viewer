@@ -9,6 +9,8 @@ const plyUrlNode = document.querySelector<HTMLScriptElement>("#ply-url");
 const statusNode = document.querySelector<HTMLDivElement>("#viewer-status");
 const filePicker = document.querySelector<HTMLInputElement>("#ply-file-picker");
 const openFileButton = document.querySelector<HTMLButtonElement>("#open-ply");
+const printScreenButton =
+  document.querySelector<HTMLButtonElement>("#print-screen");
 const modelListPanel = document.querySelector<HTMLElement>("#model-list-panel");
 const modelListToggle =
   document.querySelector<HTMLButtonElement>("#toggle-model-list");
@@ -56,7 +58,11 @@ const splatSizeValue =
 const vscodeApi = (
   window as Window & {
     acquireVsCodeApi?: () => {
-      postMessage: (message: { command: string }) => void;
+      postMessage: (message: {
+        command: string;
+        data?: ArrayBuffer;
+        fileName?: string;
+      }) => void;
     };
   }
 ).acquireVsCodeApi?.();
@@ -298,6 +304,14 @@ if (canvas && plyUrlNode) {
         typeof message.error === "string"
       ) {
         setStatus(`Could not open PLY file. ${message.error}`);
+      } else if (
+        message.command === "screenshotSaved" ||
+        message.command === "screenshotSaveCancelled" ||
+        message.command === "screenshotSaveError"
+      ) {
+        if (printScreenButton) {
+          printScreenButton.disabled = false;
+        }
       }
     });
 
@@ -613,6 +627,38 @@ if (canvas && plyUrlNode) {
         plyFilePicker?.click();
       }
     });
+    printScreenButton?.addEventListener("click", async () => {
+      printScreenButton.disabled = true;
+      try {
+        render();
+        const blob = await new Promise<Blob>((resolve, reject) => {
+          viewerCanvas.toBlob((result) => {
+            if (result) {
+              resolve(result);
+            } else {
+              reject(new Error("The viewer canvas could not be exported."));
+            }
+          }, "image/png");
+        });
+        const data = await blob.arrayBuffer();
+        const fileName = `posed-camera-${new Date()
+          .toISOString()
+          .replace(/[:.]/g, "-")}.png`;
+        if (vscodeApi) {
+          vscodeApi.postMessage({
+            command: "saveScreenshot",
+            data,
+            fileName,
+          });
+        } else {
+          downloadScreenshot(blob, fileName);
+          printScreenButton.disabled = false;
+        }
+      } catch (error) {
+        console.error("[PLY Viewer] Screenshot export failed:", error);
+        printScreenButton.disabled = false;
+      }
+    });
     plyFilePicker?.addEventListener("change", async () => {
       const files = Array.from(plyFilePicker.files ?? []);
       for (const file of files) {
@@ -667,6 +713,15 @@ function updateModelInfo(geometry: THREE.BufferGeometry): void {
   if (pointCountNode) {
     pointCountNode.textContent = new Intl.NumberFormat().format(position.count);
   }
+}
+
+function downloadScreenshot(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 function updateTargetInfo(target: THREE.Vector3): void {

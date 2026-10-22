@@ -7,6 +7,7 @@ export function createViewerScene(canvas: HTMLCanvasElement) {
     canvas,
     antialias: true,
     powerPreference: "high-performance",
+    preserveDrawingBuffer: true,
   });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.setSize(window.innerWidth, window.innerHeight, false);

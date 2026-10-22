@@ -105,6 +105,35 @@ class PlyCustomEditorProvider implements vscode.CustomReadonlyEditorProvider<Ply
         return;
       }
 
+      if (
+        typeof message === "object" &&
+        message !== null &&
+        "command" in message &&
+        message.command === "saveScreenshot"
+      ) {
+        const screenshotData = "data" in message ? message.data : undefined;
+        const requestedFileName =
+          "fileName" in message ? message.fileName : undefined;
+        if (
+          !(screenshotData instanceof ArrayBuffer) &&
+          !(screenshotData instanceof Uint8Array)
+        ) {
+          await panel.webview.postMessage({
+            command: "screenshotSaveError",
+            error: "Invalid screenshot image data.",
+          });
+          return;
+        }
+        await this.saveScreenshotInPanel(
+          panel,
+          screenshotData,
+          typeof requestedFileName === "string"
+            ? requestedFileName
+            : "posed-camera-screenshot.png",
+        );
+        return;
+      }
+
       const viewerMessage = message as ViewerMessage | undefined;
       if (
         !viewerMessage ||
@@ -148,6 +177,68 @@ class PlyCustomEditorProvider implements vscode.CustomReadonlyEditorProvider<Ply
 
     this.pendingFiles.push(...fileUris);
     await this.flushPendingFiles();
+  }
+
+  private async saveScreenshotInPanel(
+    panel: vscode.WebviewPanel,
+    imageData: ArrayBuffer | Uint8Array,
+    requestedFileName: string,
+  ): Promise<void> {
+    const imageBytes =
+      imageData instanceof Uint8Array ? imageData : new Uint8Array(imageData);
+    const pngSignature = [137, 80, 78, 71, 13, 10, 26, 10];
+    if (
+      imageBytes.byteLength < pngSignature.length ||
+      pngSignature.some((byte, index) => imageBytes[index] !== byte)
+    ) {
+      await panel.webview.postMessage({
+        command: "screenshotSaveError",
+        error: "Screenshot data is not a valid PNG image.",
+      });
+      return;
+    }
+
+    const requestedBaseName = path
+      .basename(requestedFileName)
+      .replace(/[^\w.-]/g, "_");
+    const safeFileName =
+      requestedBaseName.length > 0
+        ? requestedBaseName
+        : "posed-camera-screenshot";
+    const defaultFileName = safeFileName.toLowerCase().endsWith(".png")
+      ? safeFileName
+      : `${safeFileName}.png`;
+    try {
+      const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+      const destination = await vscode.window.showSaveDialog({
+        defaultUri: workspaceFolder
+          ? vscode.Uri.joinPath(workspaceFolder.uri, defaultFileName)
+          : undefined,
+        filters: { "PNG Images": ["png"] },
+        saveLabel: "Save Screenshot",
+      });
+      if (!destination) {
+        await panel.webview.postMessage({
+          command: "screenshotSaveCancelled",
+        });
+        return;
+      }
+      await vscode.workspace.fs.writeFile(destination, imageBytes);
+      await panel.webview.postMessage({
+        command: "screenshotSaved",
+        fileName: path.basename(destination.path),
+      });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      console.error("[EXT] Error saving viewer screenshot:", error);
+      await vscode.window.showErrorMessage(
+        `Could not save screenshot: ${detail}`,
+      );
+      await panel.webview.postMessage({
+        command: "screenshotSaveError",
+        error: detail,
+      });
+    }
   }
 
   private async flushPendingFiles(): Promise<void> {

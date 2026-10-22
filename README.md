@@ -7,6 +7,7 @@ VS-Code-Erweiterung zum Anzeigen von PLY-Punktwolken und Meshes in einem Webview
 - `.ply`-Dateien werden im Explorer standardmäßig im readonly Posed-Camera-Viewer geöffnet, auch wenn sie binär sind. Zum Bearbeiten kann über **Open With…** ausdrücklich **Text Editor** gewählt werden.
 - Der Befehl **Open Posed Camera PLY Viewer** öffnet alternativ einen Dateiauswahldialog.
 - Der Button **Open PLY** im Extension-Webview öffnet den VS-Code-Dateidialog. Die gewählten Dateien werden über `workspace.fs` gelesen und funktionieren dadurch auch bei Remote-SSH, WSL und Dev Containers. Mehrfachauswahl fügt mehrere Modelle hinzu.
+- **Print Screen** speichert den gerenderten Three.js-Canvas als PNG über einen VS-Code-Speichern-Dialog. HTML-Steuerelemente wie Buttons, Modellliste und Infobox liegen außerhalb des Canvas und erscheinen nicht im Bild; 3D-Objekte und Achsenmarker bleiben enthalten.
 - Three.js rendert mit `WebGLRenderer`, PerspectiveCamera, GPU-Tiefenpuffer und auf zwei begrenzter Display-Pixel-Dichte.
 - `PLYLoader` lädt die Originaldatei im Webview; der Extension Host serialisiert nicht mehr alle Vertices und Faces als JSON.
 - Punktwolken werden als `Points`, Meshes als `MeshStandardMaterial` gerendert. Vertex- und Face-RGB-Farben werden als Three.js-Farbattribute übernommen; vorhandene Normalen werden genutzt, andernfalls für Meshes berechnet.

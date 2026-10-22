@@ -69,8 +69,9 @@ export function buildPlyViewerHtml(
 					top: 12px;
 					left: 12px;
 					display: flex;
-					align-items: center;
-					gap: 10px;
+					flex-direction: column;
+					align-items: flex-start;
+					gap: 7px;
 					max-width: calc(100vw - 24px);
 					color: #e2e8f0;
 					font-size: 13px;
@@ -190,7 +191,8 @@ export function buildPlyViewerHtml(
 						height: min(240px, calc(100vh - 68px));
 					}
 				}
-				#open-ply {
+				#open-ply,
+				#print-screen {
 					border: 1px solid #527c7c;
 					border-radius: 4px;
 					padding: 7px 11px;
@@ -199,7 +201,9 @@ export function buildPlyViewerHtml(
 					font: inherit;
 					cursor: pointer;
 				}
-				#open-ply:hover { background: #24494b; }
+				#open-ply:hover,
+				#print-screen:hover { background: #24494b; }
+				#print-screen:disabled { opacity: 0.65; cursor: wait; }
 				#viewer-status {
 					position: fixed;
 					z-index: 1;
@@ -353,6 +357,7 @@ export function buildPlyViewerHtml(
 			<canvas id="viewer" tabindex="0"></canvas>
 			<div id="viewer-toolbar">
 				<button id="open-ply" type="button">Open PLY</button>
+				<button id="print-screen" type="button">Print Screen</button>
 				<input id="ply-file-picker" type="file" accept=".ply" multiple hidden />
 			</div>
 			<div id="viewer-status" role="status">Loading PLY…</div>
