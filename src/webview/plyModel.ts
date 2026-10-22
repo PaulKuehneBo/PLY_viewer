@@ -3,13 +3,37 @@ import { PLYLoader } from "three/addons/loaders/PLYLoader.js";
 import { parseGaussianSplatPly } from "../plyParser.js";
 import { parsePlyTopology } from "./plyTopology.js";
 
+interface GaussianSplatRenderModes {
+  opaque: THREE.Points;
+  transparent: THREE.Points;
+}
+
+interface GaussianOpacityFilter {
+  enabled: { value: boolean };
+  min: { value: number };
+  max: { value: number };
+}
+
 export class PLYModel extends THREE.Group {
   constructor(
     readonly geometry: THREE.BufferGeometry,
     readonly opacityGamma: { value: number } | undefined = undefined,
     readonly opacityInverted: { value: boolean } | undefined = undefined,
+    readonly opacityFilter: GaussianOpacityFilter | undefined = undefined,
+    readonly pointSizeScale: { value: number } | undefined = undefined,
+    private readonly gaussianSplatRenderModes:
+      | GaussianSplatRenderModes
+      | undefined = undefined,
   ) {
     super();
+  }
+
+  setGaussianSplatTransparency(enabled: boolean): void {
+    if (!this.gaussianSplatRenderModes) {
+      return;
+    }
+    this.gaussianSplatRenderModes.transparent.visible = enabled;
+    this.gaussianSplatRenderModes.opaque.visible = !enabled;
   }
 }
 
@@ -37,52 +61,45 @@ export function createPlyModel(data: ArrayBuffer): PLYModel | undefined {
 
     const opacityGamma = { value: 1 };
     const opacityInverted = { value: false };
-    const model = new PLYModel(geometry, opacityGamma, opacityInverted);
-    const material = new THREE.PointsMaterial({
-      color: 0xffffff,
-      size: 1,
-      sizeAttenuation: true,
-      vertexColors: true,
-      transparent: true,
-      depthTest: true,
-      depthWrite: false,
-    });
-    material.onBeforeCompile = (shader) => {
-      shader.vertexShader = shader.vertexShader.replace(
-        "#include <common>",
-        "#include <common>\nattribute float gaussianPointSize;\nattribute float gaussianOpacity;\nvarying float vGaussianOpacity;",
-      );
-      shader.vertexShader = shader.vertexShader.replace(
-        "#include <color_vertex>",
-        "#include <color_vertex>\nvGaussianOpacity = gaussianOpacity;",
-      );
-      shader.fragmentShader = shader.fragmentShader.replace(
-        "#include <common>",
-        "#include <common>\nuniform float gaussianOpacityGamma;\nuniform bool gaussianOpacityInverted;\nvarying float vGaussianOpacity;",
-      );
-      shader.fragmentShader = shader.fragmentShader.replace(
-        "#include <color_fragment>",
-        `#include <color_fragment>
-vec2 gaussianPointCoord = gl_PointCoord * 2.0 - 1.0;
-float gaussianRadiusSquared = dot(gaussianPointCoord, gaussianPointCoord);
-if (gaussianRadiusSquared > 1.0) discard;
-float sourceOpacity = gaussianOpacityInverted ? 1.0 - vGaussianOpacity : vGaussianOpacity;
-float adjustedOpacity = pow(max(sourceOpacity, 0.000001), gaussianOpacityGamma);
-diffuseColor.a *= adjustedOpacity * exp(-4.5 * gaussianRadiusSquared);`,
-      );
-      shader.uniforms.gaussianOpacityGamma = opacityGamma;
-      shader.uniforms.gaussianOpacityInverted = opacityInverted;
-      shader.vertexShader = shader.vertexShader.replace(
-        "gl_PointSize = size;",
-        "gl_PointSize = size * gaussianPointSize;",
-      );
-      shader.vertexShader = shader.vertexShader.replace(
-        "#include <logdepthbuf_vertex>",
-        "#include <logdepthbuf_vertex>\ngl_PointSize = min(gl_PointSize, 128.0);",
-      );
+    const opacityFilter: GaussianOpacityFilter = {
+      enabled: { value: false },
+      min: { value: 0.48 },
+      max: { value: 0.52 },
     };
-    material.customProgramCacheKey = () => "gaussian-splat-point-size-opacity-gamma";
-    model.add(new THREE.Points(geometry, material));
+    const pointSizeScale = { value: 1 };
+    const opaquePoints = new THREE.Points(
+      geometry,
+      createGaussianSplatMaterial(
+        false,
+        opacityGamma,
+        opacityInverted,
+        opacityFilter,
+        pointSizeScale,
+      ),
+    );
+    opaquePoints.visible = false;
+    const transparentPoints = new THREE.Points(
+      geometry,
+      createGaussianSplatMaterial(
+        true,
+        opacityGamma,
+        opacityInverted,
+        opacityFilter,
+        pointSizeScale,
+      ),
+    );
+    const model = new PLYModel(
+      geometry,
+      opacityGamma,
+      opacityInverted,
+      opacityFilter,
+      pointSizeScale,
+      {
+        opaque: opaquePoints,
+        transparent: transparentPoints,
+      },
+    );
+    model.add(opaquePoints, transparentPoints);
     return model;
   }
 
@@ -163,6 +180,82 @@ diffuseColor.a *= adjustedOpacity * exp(-4.5 * gaussianRadiusSquared);`,
   }
 
   return model;
+}
+
+function createGaussianSplatMaterial(
+  transparent: boolean,
+  opacityGamma: { value: number },
+  opacityInverted: { value: boolean },
+  opacityFilter: GaussianOpacityFilter,
+  pointSizeScale: { value: number },
+): THREE.PointsMaterial {
+  const material = new THREE.PointsMaterial({
+    color: 0xffffff,
+    size: 1,
+    sizeAttenuation: true,
+    vertexColors: true,
+    transparent,
+    depthTest: true,
+    depthWrite: !transparent,
+  });
+  material.onBeforeCompile = (shader) => {
+    const vertexDeclarations = transparent
+      ? "uniform float gaussianPointSizeScale;\nattribute float gaussianPointSize;\nattribute float gaussianOpacity;\nvarying float vGaussianOpacity;"
+      : "attribute float gaussianPointSize;\nattribute float gaussianOpacity;\nvarying float vGaussianOpacity;";
+    shader.vertexShader = shader.vertexShader.replace(
+      "#include <common>",
+      `#include <common>\n${vertexDeclarations}`,
+    );
+    shader.vertexShader = shader.vertexShader.replace(
+      "#include <color_vertex>",
+      "#include <color_vertex>\nvGaussianOpacity = gaussianOpacity;",
+    );
+    if (transparent) {
+      shader.fragmentShader = shader.fragmentShader.replace(
+        "#include <common>",
+        "#include <common>\nuniform float gaussianOpacityGamma;\nuniform bool gaussianOpacityInverted;\nvarying float vGaussianOpacity;",
+      );
+      shader.fragmentShader = shader.fragmentShader.replace(
+        "#include <color_fragment>",
+        `#include <color_fragment>
+vec2 gaussianPointCoord = gl_PointCoord * 2.0 - 1.0;
+float gaussianRadiusSquared = dot(gaussianPointCoord, gaussianPointCoord);
+if (gaussianRadiusSquared > 1.0) discard;
+float sourceOpacity = gaussianOpacityInverted ? 1.0 - vGaussianOpacity : vGaussianOpacity;
+float adjustedOpacity = pow(max(sourceOpacity, 0.000001), gaussianOpacityGamma);
+diffuseColor.a *= adjustedOpacity * exp(-4.5 * gaussianRadiusSquared);`,
+      );
+      shader.uniforms.gaussianOpacityGamma = opacityGamma;
+      shader.uniforms.gaussianOpacityInverted = opacityInverted;
+      shader.uniforms.gaussianPointSizeScale = pointSizeScale;
+    } else {
+      shader.fragmentShader = shader.fragmentShader.replace(
+        "#include <common>",
+        "#include <common>\nuniform bool gaussianOpacityFilterEnabled;\nuniform float gaussianOpacityMin;\nuniform float gaussianOpacityMax;\nvarying float vGaussianOpacity;",
+      );
+      shader.fragmentShader = shader.fragmentShader.replace(
+        "#include <color_fragment>",
+        `#include <color_fragment>
+if (gaussianOpacityFilterEnabled && (vGaussianOpacity < gaussianOpacityMin || vGaussianOpacity > gaussianOpacityMax)) discard;`,
+      );
+      shader.uniforms.gaussianOpacityFilterEnabled = opacityFilter.enabled;
+      shader.uniforms.gaussianOpacityMin = opacityFilter.min;
+      shader.uniforms.gaussianOpacityMax = opacityFilter.max;
+    }
+    shader.vertexShader = shader.vertexShader.replace(
+      "gl_PointSize = size;",
+      transparent
+        ? "gl_PointSize = size * gaussianPointSize * gaussianPointSizeScale;"
+        : "gl_PointSize = size * gaussianPointSize;",
+    );
+    shader.vertexShader = shader.vertexShader.replace(
+      "#include <logdepthbuf_vertex>",
+      "#include <logdepthbuf_vertex>\ngl_PointSize = min(gl_PointSize, 128.0);",
+    );
+  };
+  material.customProgramCacheKey = () =>
+    `gaussian-splat-point-size-${transparent ? "transparent" : "opaque"}`;
+  return material;
 }
 
 function convertFloat64AttributesForWebGL(

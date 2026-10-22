@@ -37,6 +37,22 @@ const opacityGammaValue =
   document.querySelector<HTMLOutputElement>("#opacity-gamma-value");
 const opacityInvertToggle =
   document.querySelector<HTMLInputElement>("#opacity-invert");
+const splatTransparencyToggle =
+  document.querySelector<HTMLInputElement>("#splat-transparency");
+const opacityFilterToggle =
+  document.querySelector<HTMLInputElement>("#opacity-filter-enabled");
+const opacityFilterSlider =
+  document.querySelector<HTMLInputElement>("#opacity-filter-value");
+const opacityFilterSliderContainer =
+  document.querySelector<HTMLDivElement>("#opacity-filter-slider");
+const opacityFilterRange =
+  document.querySelector<HTMLOutputElement>("#opacity-filter-range");
+const splatSizeControl =
+  document.querySelector<HTMLDivElement>("#splat-size-control");
+const splatSizeSlider =
+  document.querySelector<HTMLInputElement>("#splat-size-scale");
+const splatSizeValue =
+  document.querySelector<HTMLOutputElement>("#splat-size-value");
 const vscodeApi = (
   window as Window & {
     acquireVsCodeApi?: () => {
@@ -106,7 +122,51 @@ if (canvas && plyUrlNode) {
     }> = [];
     let opacityGamma = Number(opacityGammaSlider?.value ?? 1);
     let opacityInverted = opacityInvertToggle?.checked ?? false;
+    let transparentSplats = splatTransparencyToggle?.checked ?? true;
+    let opacityFilterEnabled = opacityFilterToggle?.checked ?? false;
+    let opacityFilterCenter = Number(opacityFilterSlider?.value ?? 50);
+    let pointSizeScale = Number(splatSizeSlider?.value ?? 1);
     let pendingRemoval: (typeof models)[number] | undefined;
+
+    function updateOpacityFilterControls(): void {
+      const minimum = Math.max(0, opacityFilterCenter - 2);
+      const maximum = Math.min(100, opacityFilterCenter + 2);
+      if (opacityFilterRange) {
+        opacityFilterRange.value = `${minimum}–${maximum} %`;
+      }
+      if (opacityFilterSliderContainer) {
+        opacityFilterSliderContainer.hidden =
+          !opacityFilterEnabled || transparentSplats;
+      }
+      if (opacityFilterToggle) {
+        opacityFilterToggle.disabled = transparentSplats;
+      }
+      if (opacityFilterSlider) {
+        opacityFilterSlider.disabled = transparentSplats;
+      }
+      if (splatSizeControl) {
+        splatSizeControl.hidden = !transparentSplats;
+      }
+      for (const { model } of models) {
+        if (!model.opacityFilter) {
+          continue;
+        }
+        model.opacityFilter.enabled.value = opacityFilterEnabled;
+        model.opacityFilter.min.value = minimum / 100;
+        model.opacityFilter.max.value = maximum / 100;
+      }
+    }
+
+    function updateOpacityControlAvailability(): void {
+      if (opacityGammaSlider) {
+        opacityGammaSlider.disabled = !transparentSplats;
+      }
+      if (opacityInvertToggle) {
+        opacityInvertToggle.disabled = !transparentSplats;
+      }
+      updateOpacityFilterControls();
+    }
+    updateOpacityControlAvailability();
 
     opacityGammaSlider?.addEventListener("input", () => {
       opacityGamma = Number(opacityGammaSlider.value);
@@ -129,6 +189,40 @@ if (canvas && plyUrlNode) {
       scheduleRender();
     });
 
+    opacityFilterToggle?.addEventListener("change", () => {
+      opacityFilterEnabled = opacityFilterToggle.checked;
+      updateOpacityFilterControls();
+      scheduleRender();
+    });
+
+    opacityFilterSlider?.addEventListener("input", () => {
+      opacityFilterCenter = Number(opacityFilterSlider.value);
+      updateOpacityFilterControls();
+      scheduleRender();
+    });
+
+    splatSizeSlider?.addEventListener("input", () => {
+      pointSizeScale = Number(splatSizeSlider.value);
+      if (splatSizeValue) {
+        splatSizeValue.value = `${pointSizeScale.toFixed(1)}×`;
+      }
+      for (const { model } of models) {
+        if (model.pointSizeScale) {
+          model.pointSizeScale.value = pointSizeScale;
+        }
+      }
+      scheduleRender();
+    });
+
+    splatTransparencyToggle?.addEventListener("change", () => {
+      transparentSplats = splatTransparencyToggle.checked;
+      updateOpacityControlAvailability();
+      for (const { model } of models) {
+        model.setGaussianSplatTransparency(transparentSplats);
+      }
+      scheduleRender();
+    });
+
     async function loadPly(data: ArrayBuffer, fileName: string): Promise<void> {
       setStatus(`Loading ${fileName}…`);
       try {
@@ -143,6 +237,17 @@ if (canvas && plyUrlNode) {
         if (model.opacityInverted) {
           model.opacityInverted.value = opacityInverted;
         }
+        if (model.opacityFilter) {
+          model.opacityFilter.enabled.value = opacityFilterEnabled;
+          model.opacityFilter.min.value =
+            Math.max(0, opacityFilterCenter - 2) / 100;
+          model.opacityFilter.max.value =
+            Math.min(100, opacityFilterCenter + 2) / 100;
+        }
+        if (model.pointSizeScale) {
+          model.pointSizeScale.value = pointSizeScale;
+        }
+        model.setGaussianSplatTransparency(transparentSplats);
 
         const isFirstModel = models.length === 0;
         model.name = fileName;

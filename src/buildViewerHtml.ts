@@ -273,10 +273,73 @@ export function buildPlyViewerHtml(
 					margin: 0;
 					accent-color: #60b6a5;
 				}
+				.splat-transparency-control {
+					display: flex;
+					align-items: center;
+					gap: 7px;
+					margin-top: 8px;
+					color: #a9c0c2;
+				}
+				#splat-transparency {
+					margin: 0;
+					accent-color: #60b6a5;
+				}
 				#opacity-gamma {
 					width: 100%;
 					margin: 8px 0 0;
 					accent-color: #60b6a5;
+				}
+				.splat-size-control {
+					margin-top: 9px;
+					border-top: 1px solid #30464a;
+					padding-top: 9px;
+				}
+				.splat-size-label {
+					display: flex;
+					justify-content: space-between;
+					align-items: center;
+					color: #a9c0c2;
+				}
+				#splat-size-scale {
+					width: 100%;
+					margin: 7px 0 0;
+					accent-color: #60b6a5;
+				}
+				.splat-size-control[hidden] {
+					display: none;
+				}
+				.opacity-range-filter {
+					display: block;
+					margin-top: 10px;
+					border-top: 1px solid #30464a;
+					padding-top: 9px;
+				}
+				.opacity-range-filter-toggle {
+					display: flex;
+					align-items: center;
+					gap: 7px;
+					color: #a9c0c2;
+				}
+				#opacity-filter-enabled,
+				#opacity-filter-value {
+					margin: 0;
+					accent-color: #60b6a5;
+				}
+				.opacity-filter-slider {
+					margin-top: 9px;
+				}
+				.opacity-filter-slider[hidden] {
+					display: none;
+				}
+				.opacity-filter-value-label {
+					display: flex;
+					justify-content: space-between;
+					gap: 8px;
+					color: #a9c0c2;
+				}
+				#opacity-filter-value {
+					width: 100%;
+					margin-top: 7px;
 				}
 				#model-info-content dt { color: #a9c0c2; }
 				#model-info-content dd { margin: 0; font-variant-numeric: tabular-nums; }
@@ -329,6 +392,30 @@ export function buildPlyViewerHtml(
 							<input id="opacity-invert" type="checkbox" />
 							Invert opacity
 						</label>
+						<label class="splat-transparency-control">
+							<input id="splat-transparency" type="checkbox" checked />
+							Transparent splats
+						</label>
+						<div id="splat-size-control" class="splat-size-control">
+							<div class="splat-size-label">
+								<label for="splat-size-scale">Point radius scale</label>
+								<output id="splat-size-value" for="splat-size-scale">1.0×</output>
+							</div>
+							<input id="splat-size-scale" type="range" min="1" max="10" step="0.1" value="1" aria-label="Transparent splat point radius scale" />
+						</div>
+					</div>
+					<div class="opacity-range-filter">
+						<label class="opacity-range-filter-toggle">
+							<input id="opacity-filter-enabled" type="checkbox" />
+							Filter by opacity
+						</label>
+						<div id="opacity-filter-slider" class="opacity-filter-slider" hidden>
+							<div class="opacity-filter-value-label">
+								<label for="opacity-filter-value">Opacity range</label>
+								<output id="opacity-filter-range" for="opacity-filter-value">48–52 %</output>
+							</div>
+							<input id="opacity-filter-value" type="range" min="0" max="100" step="1" value="50" aria-label="Opacity filter center percentage" />
+						</div>
 					</div>
 				</dl>
 			</section>
